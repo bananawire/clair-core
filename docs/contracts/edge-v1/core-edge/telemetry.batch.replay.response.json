@@ -1,6 +1,0 @@
-{
-  "_comment": "Exact replay of outbox-1842 with the same reading_id and identical measurement data. CREATED means stored, not necessarily newly inserted. A replay with the same reading_id but different data returns ERROR/VALIDATION_ERROR.",
-  "results": [
-    { "client_ref": "outbox-1842", "status": "CREATED" }
-  ]
-}

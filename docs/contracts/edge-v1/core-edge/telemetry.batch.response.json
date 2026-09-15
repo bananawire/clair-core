@@ -1,7 +1,0 @@
-{
-  "results": [
-    { "client_ref": "outbox-1842", "status": "CREATED" },
-    { "client_ref": "outbox-1843", "status": "ERROR", "reason": "DEVICE_NOT_FOUND" },
-    { "client_ref": "outbox-1844", "status": "ERROR", "reason": "VALIDATION_ERROR" }
-  ]
-}

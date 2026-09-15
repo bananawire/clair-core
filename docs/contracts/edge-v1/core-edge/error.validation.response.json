@@ -1,6 +1,0 @@
-{
-  "timestamp": "2026-09-11T14:41:00.000Z",
-  "status": 400,
-  "error": "Validation failed",
-  "details": { "hardware_id": "must not be blank" }
-}

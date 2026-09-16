@@ -1,16 +1,16 @@
 package com.claircore.iam.application.internal.commandservices;
 
 import com.claircore.iam.domain.model.commands.AuthenticateWithGoogleCommand;
-import com.claircore.iam.domain.model.entities.User;
+import com.claircore.iam.domain.model.aggregates.User;
 import com.claircore.iam.domain.model.events.UserAuthenticatedWithGoogleEvent;
-import com.claircore.iam.domain.model.events.UserRegisteredEvent;
+import com.claircore.iam.interfaces.events.UserRegisteredIntegrationEvent;
 import com.claircore.iam.domain.model.valueobjects.EmailAddress;
 import com.claircore.iam.domain.model.valueobjects.GoogleIdToken;
 import com.claircore.iam.domain.model.valueobjects.GoogleUserId;
 import com.claircore.iam.domain.model.valueobjects.OAuthProvider;
 import com.claircore.iam.domain.model.valueobjects.Password;
-import com.claircore.iam.domain.services.GoogleTokenVerifier;
-import com.claircore.iam.infrastructure.persistence.jpa.repositories.UserRepository;
+import com.claircore.iam.application.internal.outboundservices.oauth.GoogleTokenVerifier;
+import com.claircore.iam.domain.repositories.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -66,7 +66,8 @@ class GoogleAuthenticationCommandServiceImplTest {
                     user.getStatus(),
                     user.getOauthProvider(),
                     user.getOauthSubject()
-            );
+            ,
+                null, null);
         });
 
         Optional<User> result = service.handle(new AuthenticateWithGoogleCommand(new GoogleIdToken("token")));
@@ -75,7 +76,7 @@ class GoogleAuthenticationCommandServiceImplTest {
         assertEquals(OAuthProvider.GOOGLE, result.get().getOauthProvider());
         assertEquals("google-subject", result.get().getOauthSubject());
         verify(userRepository).save(any(User.class));
-        verify(eventPublisher).publishEvent(org.mockito.ArgumentMatchers.any(UserRegisteredEvent.class));
+        verify(eventPublisher).publishEvent(org.mockito.ArgumentMatchers.any(UserRegisteredIntegrationEvent.class));
         verify(eventPublisher).publishEvent(org.mockito.ArgumentMatchers.any(UserAuthenticatedWithGoogleEvent.class));
     }
 
@@ -88,7 +89,8 @@ class GoogleAuthenticationCommandServiceImplTest {
                 com.claircore.iam.domain.model.valueobjects.UserStatus.ACTIVE,
                 com.claircore.iam.domain.model.valueobjects.OAuthProvider.MAIL,
                 null
-        );
+        ,
+                null, null);
         when(googleTokenVerifier.verify(any())).thenReturn(Optional.of(
                 new com.claircore.iam.domain.model.valueobjects.VerifiedGoogleIdentity(
                         new EmailAddress("user@example.com"),
@@ -98,13 +100,15 @@ class GoogleAuthenticationCommandServiceImplTest {
         ));
         when(userRepository.findByEmail(new EmailAddress("user@example.com"))).thenReturn(Optional.of(existingUser));
 
+        when(userRepository.save(existingUser)).thenAnswer(invocation -> invocation.getArgument(0));
+
         Optional<User> result = service.handle(new AuthenticateWithGoogleCommand(new GoogleIdToken("token")));
 
         assertTrue(result.isPresent());
         assertTrue(result.get().isActive());
         assertEquals(OAuthProvider.GOOGLE, result.get().getOauthProvider());
         assertEquals("google-subject", result.get().getOauthSubject());
-        verify(userRepository, never()).save(any());
+        verify(userRepository).save(existingUser);
         verify(eventPublisher).publishEvent(org.mockito.ArgumentMatchers.any(UserAuthenticatedWithGoogleEvent.class));
     }
 

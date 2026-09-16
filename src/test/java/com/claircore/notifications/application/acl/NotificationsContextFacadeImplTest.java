@@ -2,7 +2,7 @@ package com.claircore.notifications.application.acl;
 
 import com.claircore.notifications.domain.model.commands.SendVerificationCodeCommand;
 import com.claircore.notifications.domain.model.commands.SendWelcomeEmailCommand;
-import com.claircore.notifications.domain.services.EmailCommandService;
+import com.claircore.notifications.application.commandservices.EmailCommandService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;

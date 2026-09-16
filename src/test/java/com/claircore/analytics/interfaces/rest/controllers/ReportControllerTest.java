@@ -2,17 +2,17 @@ package com.claircore.analytics.interfaces.rest.controllers;
 
 import com.claircore.analytics.application.internal.outboundservices.acl.ExternalBillingService;
 import com.claircore.analytics.application.internal.outboundservices.acl.ExternalDeviceService;
-import com.claircore.analytics.domain.model.entities.DeviceDailySummary;
-import com.claircore.analytics.domain.model.entities.DeviceMonthlySummary;
+import com.claircore.analytics.domain.model.aggregates.DeviceDailySummary;
+import com.claircore.analytics.domain.model.aggregates.DeviceMonthlySummary;
 import com.claircore.analytics.domain.model.queries.GetDailyReportQuery;
 import com.claircore.analytics.domain.model.queries.GetMonthlyReportQuery;
 import com.claircore.analytics.domain.model.valueobjects.AqiCategory;
 import com.claircore.analytics.domain.model.valueobjects.AqiCategoryBreakdown;
 import com.claircore.analytics.domain.model.valueobjects.DeviceId;
 import com.claircore.analytics.domain.model.valueobjects.MetricStats;
-import com.claircore.analytics.domain.services.DailyReportQueryService;
-import com.claircore.analytics.domain.services.MonthlyReportQueryService;
-import com.claircore.iam.infrastructure.tokens.jwt.JwtAuthenticationFilter;
+import com.claircore.analytics.application.queryservices.DailyReportQueryService;
+import com.claircore.analytics.application.queryservices.MonthlyReportQueryService;
+import com.claircore.shared.interfaces.rest.security.CurrentUserIdArgumentResolver;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
@@ -55,7 +55,7 @@ class ReportControllerTest {
     private ExternalBillingService externalBillingService;
 
     @MockitoBean
-    private com.claircore.iam.domain.services.TokenQueryService tokenQueryService;
+    private com.claircore.iam.application.queryservices.TokenQueryService tokenQueryService;
 
     @MockitoBean
     private com.claircore.iam.infrastructure.tokens.jwt.JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -101,7 +101,7 @@ class ReportControllerTest {
                 .thenReturn(Optional.of(dailySummary));
 
         mockMvc.perform(get("/api/v1/analytics/devices/{deviceId}/reports/daily", deviceId)
-                        .requestAttr(JwtAuthenticationFilter.USER_ID_ATTRIBUTE, userId)
+                        .requestAttr(CurrentUserIdArgumentResolver.USER_ID_ATTRIBUTE, userId)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.averageAqi").value(55));
@@ -115,7 +115,7 @@ class ReportControllerTest {
         when(externalDeviceService.isDeviceOwnedByUser(deviceId, userId)).thenReturn(false);
 
         mockMvc.perform(get("/api/v1/analytics/devices/{deviceId}/reports/daily", deviceId)
-                        .requestAttr(JwtAuthenticationFilter.USER_ID_ATTRIBUTE, userId)
+                        .requestAttr(CurrentUserIdArgumentResolver.USER_ID_ATTRIBUTE, userId)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isForbidden());
     }
@@ -148,7 +148,7 @@ class ReportControllerTest {
                 .thenReturn(Optional.of(monthlySummary));
 
         mockMvc.perform(get("/api/v1/analytics/devices/{deviceId}/reports/monthly", deviceId)
-                        .requestAttr(JwtAuthenticationFilter.USER_ID_ATTRIBUTE, userId)
+                        .requestAttr(CurrentUserIdArgumentResolver.USER_ID_ATTRIBUTE, userId)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.averageAqi").value(55));
@@ -163,7 +163,7 @@ class ReportControllerTest {
         when(externalBillingService.canAccessMonthlyReports(userId)).thenReturn(false);
 
         mockMvc.perform(get("/api/v1/analytics/devices/{deviceId}/reports/monthly", deviceId)
-                        .requestAttr(JwtAuthenticationFilter.USER_ID_ATTRIBUTE, userId)
+                        .requestAttr(CurrentUserIdArgumentResolver.USER_ID_ATTRIBUTE, userId)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isForbidden());
     }

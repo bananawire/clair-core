@@ -1,9 +1,9 @@
 package com.claircore.iam.application.internal.queryservices;
 
-import com.claircore.iam.domain.model.entities.User;
+import com.claircore.iam.application.queryservices.UserQueryService;
+import com.claircore.iam.domain.model.aggregates.User;
 import com.claircore.iam.domain.model.queries.GetUserByEmailQuery;
-import com.claircore.iam.domain.services.UserQueryService;
-import com.claircore.iam.infrastructure.persistence.jpa.repositories.UserRepository;
+import com.claircore.iam.domain.repositories.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

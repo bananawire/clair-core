@@ -1,5 +1,6 @@
 package com.claircore.iam.infrastructure.oauth.google;
 
+import com.claircore.iam.application.internal.outboundservices.oauth.OAuthStateService;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,7 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 @Component
-public class GoogleOAuthStateManager {
+public class GoogleOAuthStateManager implements OAuthStateService {
 
     private static final String CLAIM_PURPOSE = "purpose";
     private static final String PURPOSE_VALUE = "oauth_state";
@@ -22,6 +23,7 @@ public class GoogleOAuthStateManager {
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
+    @Override
     public String generateState() {
         return Jwts.builder()
                 .claim(CLAIM_PURPOSE, PURPOSE_VALUE)
@@ -31,6 +33,7 @@ public class GoogleOAuthStateManager {
                 .compact();
     }
 
+    @Override
     public boolean validateState(String state) {
         try {
             var claims = Jwts.parser()

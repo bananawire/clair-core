@@ -3,11 +3,11 @@ package com.claircore.device.interfaces.rest.controllers;
 import com.claircore.device.domain.model.commands.CreateOrganizationCommand;
 import com.claircore.device.domain.model.commands.DeleteOrganizationCommand;
 import com.claircore.device.domain.model.commands.UpdateOrganizationNameCommand;
-import com.claircore.device.domain.model.entities.Organization;
+import com.claircore.device.domain.model.aggregates.Organization;
 import com.claircore.device.domain.model.valueobjects.UserId;
-import com.claircore.device.domain.services.OrganizationCommandService;
-import com.claircore.device.domain.services.DeviceQueryService;
-import com.claircore.device.domain.model.queries.GetOrganizationByIdQuery;
+import com.claircore.device.application.commandservices.OrganizationCommandService;
+import com.claircore.device.application.queryservices.DeviceQueryService;
+import com.claircore.device.domain.model.queries.GetOrganizationByIdForUserQuery;
 import com.claircore.device.domain.model.queries.GetOrganizationsByOwnerQuery;
 import com.claircore.device.interfaces.rest.resources.CreateOrganizationRequest;
 import com.claircore.device.interfaces.rest.resources.OrganizationResponse;
@@ -57,7 +57,7 @@ public class OrganizationController {
     @GetMapping("/{organizationId}")
     @Operation(summary = "Get organization by ID")
     public ResponseEntity<OrganizationResponse> getOrganization(@PathVariable UUID organizationId) {
-        var query = new GetOrganizationByIdQuery(organizationId);
+        var query = new GetOrganizationByIdForUserQuery(organizationId, new UserId(getAuthenticatedUserId()));
         return deviceQueryService.handle(query)
             .map(org -> ResponseEntity.ok(toResponse(org)))
             .orElse(ResponseEntity.notFound().build());
@@ -80,7 +80,7 @@ public class OrganizationController {
         @ApiResponse(responseCode = "409", description = "Organization has registered devices", content = @Content)
     })
     public ResponseEntity<Void> deleteOrganization(@PathVariable UUID organizationId) {
-        organizationCommandService.handle(new DeleteOrganizationCommand(organizationId));
+        organizationCommandService.handle(new DeleteOrganizationCommand(organizationId, new UserId(getAuthenticatedUserId())));
         return ResponseEntity.noContent().build();
     }
 
@@ -90,7 +90,7 @@ public class OrganizationController {
             @PathVariable UUID organizationId,
             @RequestBody UpdateOrganizationNameRequest request) {
 
-        organizationCommandService.handle(new UpdateOrganizationNameCommand(organizationId, request.name()));
+        organizationCommandService.handle(new UpdateOrganizationNameCommand(organizationId, request.name(), new UserId(getAuthenticatedUserId())));
         return ResponseEntity.ok().build();
     }
 
@@ -107,8 +107,8 @@ public class OrganizationController {
             org.getId(),
             org.getName(),
             org.getOwnerUserId().userId(),
-            org.getAuditFields().getCreatedAt().toInstant(),
-            org.getAuditFields().getUpdatedAt().toInstant()
+            org.getCreatedAt(),
+            org.getUpdatedAt()
         );
     }
 }

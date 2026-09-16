@@ -1,6 +1,7 @@
 package com.claircore.iam.infrastructure.tokens.jwt;
 
-import com.claircore.iam.domain.services.TokenQueryService;
+import com.claircore.iam.application.queryservices.TokenQueryService;
+import com.claircore.shared.interfaces.rest.security.CurrentUserIdArgumentResolver;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -18,8 +19,6 @@ import java.util.UUID;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
-
-    public static final String USER_ID_ATTRIBUTE = "X-User-Id";
 
     private final TokenQueryService tokenQueryService;
 
@@ -61,7 +60,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authToken);
 
-                request.setAttribute(USER_ID_ATTRIBUTE, userId);
+                request.setAttribute(CurrentUserIdArgumentResolver.USER_ID_ATTRIBUTE, userId);
             }
         }
 

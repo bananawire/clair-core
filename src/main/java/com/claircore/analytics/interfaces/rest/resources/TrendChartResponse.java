@@ -10,6 +10,9 @@ public record TrendChartResponse(
         @Schema(description = "List of trend data points")
         List<TrendDataPoint> dataPoints
 ) {
+    @com.fasterxml.jackson.annotation.JsonProperty("indexLabel")
+    public String indexLabel() { return "Indicative PM2.5 index (EPA breakpoints; not NowCast)"; }
+
     @Schema(description = "Single trend data point")
     public record TrendDataPoint(
             @Schema(description = "Timestamp of the snapshot", example = "2026-05-23T10:00:00Z")

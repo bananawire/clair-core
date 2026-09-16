@@ -1,59 +1,58 @@
 package com.claircore.analytics.application.internal.queryservices;
 
-import com.claircore.alerting.domain.model.valueobjects.AlertStatus;
 import com.claircore.alerting.interfaces.acl.AlertDetails;
 import com.claircore.alerting.interfaces.acl.AlertingContextFacade;
 import com.claircore.analytics.application.internal.outboundservices.acl.ExternalDeviceService;
-import com.claircore.analytics.application.internal.services.KpiLiveMetricsCache;
+import com.claircore.analytics.application.internal.outboundservices.cache.KpiLiveMetricsBuffer;
+import com.claircore.analytics.application.internal.outboundservices.cache.LiveMetricsStore;
+import com.claircore.analytics.application.queryservices.OverviewDashboardQueryService;
 import com.claircore.analytics.domain.model.queries.GetOverviewDashboardQuery;
 import com.claircore.analytics.domain.model.valueobjects.AggregatedMetrics;
 import com.claircore.analytics.domain.model.valueobjects.DeviceMetricsSnapshot;
 import com.claircore.analytics.domain.model.valueobjects.Freshness;
 import com.claircore.analytics.domain.model.valueobjects.OverviewDashboardSnapshot;
-import com.claircore.analytics.domain.services.MetricsAggregationDomainService;
-import com.claircore.analytics.domain.services.OverviewDashboardQueryService;
-import com.claircore.analytics.domain.services.TrendAnalysisDomainService;
-import com.claircore.analytics.domain.services.AqiCalculationDomainService;
-import com.claircore.analytics.infrastructure.persistence.jpa.repositories.DeviceAnalyticsSnapshotRepository;
+import com.claircore.analytics.domain.services.MetricsAggregator;
+import com.claircore.analytics.domain.services.TrendAnalyzer;
+import com.claircore.analytics.domain.services.AqiCalculator;
+import com.claircore.analytics.domain.repositories.DeviceAnalyticsSnapshotRepository;
 import com.claircore.device.interfaces.acl.OrganizationSummary;
 import com.claircore.device.interfaces.acl.SpaceSummary;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
+
 
 @Service
 public class OverviewDashboardQueryServiceImpl implements OverviewDashboardQueryService {
 
-    private static final List<AlertStatus> DEFAULT_ALERT_STATUSES = List.of(AlertStatus.ACTIVE, AlertStatus.ACKNOWLEDGED);
+    private static final List<String> DEFAULT_ALERT_STATUSES = List.of("ACTIVE", "ACKNOWLEDGED");
 
     private final ExternalDeviceService externalDeviceService;
     private final AlertingContextFacade alertingContextFacade;
-    private final KpiLiveMetricsCache liveMetricsCache;
+    private final LiveMetricsStore liveMetricsStore;
     private final DeviceAnalyticsSnapshotRepository snapshotRepository;
-    private final MetricsAggregationDomainService metricsAggregationDomainService;
-    private final TrendAnalysisDomainService trendAnalysisDomainService;
-    private final AqiCalculationDomainService aqiCalculationDomainService;
+    private final MetricsAggregator metricsAggregator;
+    private final TrendAnalyzer trendAnalyzer;
+    private final AqiCalculator aqiCalculator;
 
     public OverviewDashboardQueryServiceImpl(
             ExternalDeviceService externalDeviceService,
             AlertingContextFacade alertingContextFacade,
-            KpiLiveMetricsCache liveMetricsCache,
+            LiveMetricsStore liveMetricsStore,
             DeviceAnalyticsSnapshotRepository snapshotRepository,
-            MetricsAggregationDomainService metricsAggregationDomainService,
-            TrendAnalysisDomainService trendAnalysisDomainService,
-            AqiCalculationDomainService aqiCalculationDomainService
+            MetricsAggregator metricsAggregator,
+            TrendAnalyzer trendAnalyzer,
+            AqiCalculator aqiCalculator
     ) {
         this.externalDeviceService = externalDeviceService;
         this.alertingContextFacade = alertingContextFacade;
-        this.liveMetricsCache = liveMetricsCache;
+        this.liveMetricsStore = liveMetricsStore;
         this.snapshotRepository = snapshotRepository;
-        this.metricsAggregationDomainService = metricsAggregationDomainService;
-        this.trendAnalysisDomainService = trendAnalysisDomainService;
-        this.aqiCalculationDomainService = aqiCalculationDomainService;
+        this.metricsAggregator = metricsAggregator;
+        this.trendAnalyzer = trendAnalyzer;
+        this.aqiCalculator = aqiCalculator;
     }
 
     @Override
@@ -65,59 +64,24 @@ public class OverviewDashboardQueryServiceImpl implements OverviewDashboardQuery
 
         List<OrganizationSummary> orgs = externalDeviceService.findOrganizationsByOwnerId(ownerUserId);
         
-        // Use CompletableFuture to fetch organization details in parallel
-        List<CompletableFuture<OverviewDashboardSnapshot.OrganizationBreakdown>> orgBreakdownFutures = new ArrayList<>();
-        Set<UUID> allDeviceIds = Collections.synchronizedSet(new HashSet<>());
-        
+        Set<UUID> allDeviceIds = new LinkedHashSet<>();
+        List<OverviewDashboardSnapshot.OrganizationBreakdown> orgBreakdown = new ArrayList<>();
         for (OrganizationSummary org : orgs) {
-            CompletableFuture<OverviewDashboardSnapshot.OrganizationBreakdown> orgFuture = CompletableFuture.supplyAsync(() -> {
-                List<SpaceSummary> spaces = externalDeviceService.findSpacesByOrganizationId(org.organizationId());
-                List<OverviewDashboardSnapshot.SpaceBreakdown> spaceBreakdowns = new ArrayList<>();
-                
-                // Fetch spaces in parallel
-                List<CompletableFuture<OverviewDashboardSnapshot.SpaceBreakdown>> spaceFutures = spaces.stream().map(space -> CompletableFuture.supplyAsync(() -> {
-                    List<UUID> spaceDeviceIds = externalDeviceService.findDeviceIdsBySpaceId(space.spaceId(), deviceLimit);
-                    allDeviceIds.addAll(spaceDeviceIds);
-
-                    var aggregated = aggregateAcrossDevices(spaceDeviceIds);
-                    return new OverviewDashboardSnapshot.SpaceBreakdown(
-                            space.spaceId(),
-                            space.organizationId(),
-                            space.spaceName(),
-                            aggregated.aqiValue(),
-                            aggregated.aqiCategory(),
-                            aggregated.recordedAt(),
-                            spaceDeviceIds.size(),
-                            aggregated.freshness().name()
-                    );
-                })).toList();
-                
-                for (var sf : spaceFutures) {
-                    spaceBreakdowns.add(sf.join());
-                }
-
-                return new OverviewDashboardSnapshot.OrganizationBreakdown(
-                        org.organizationId(),
-                        org.organizationName(),
-                        spaceBreakdowns
-                );
-            });
-            orgBreakdownFutures.add(orgFuture);
+            List<OverviewDashboardSnapshot.SpaceBreakdown> spaces = new ArrayList<>();
+            for (SpaceSummary space : externalDeviceService.findSpacesByOrganizationId(org.organizationId())) {
+                List<UUID> deviceIds = externalDeviceService.findDeviceIdsBySpaceId(space.spaceId(), deviceLimit);
+                allDeviceIds.addAll(deviceIds);
+                var metrics = aggregateAcrossDevices(deviceIds);
+                spaces.add(new OverviewDashboardSnapshot.SpaceBreakdown(space.spaceId(), org.organizationId(),
+                        space.spaceName(), metrics.aqiValue(), metrics.aqiCategory(), metrics.recordedAt(),
+                        deviceIds.size(), metrics.freshness().name()));
+            }
+            orgBreakdown.add(new OverviewDashboardSnapshot.OrganizationBreakdown(
+                    org.organizationId(), org.organizationName(), spaces));
         }
-
-        List<OverviewDashboardSnapshot.OrganizationBreakdown> orgBreakdown = orgBreakdownFutures.stream()
-                .map(CompletableFuture::join)
-                .toList();
-
         int spaceCount = orgBreakdown.stream().mapToInt(ob -> ob.spaces().size()).sum();
-
-        // Fetch recent alerts asynchronously
-        CompletableFuture<List<OverviewDashboardSnapshot.AlertSummary>> alertsFuture = CompletableFuture.supplyAsync(() -> {
-            List<AlertDetails> recentAlerts = alertingContextFacade.getRecentAlertsByOwnerId(ownerUserId, DEFAULT_ALERT_STATUSES, alertLimit);
-            return enrichAlertNames(toAlertSummaries(recentAlerts));
-        });
-
-        List<OverviewDashboardSnapshot.AlertSummary> alertSummaries = alertsFuture.join();
+        var recentAlerts = alertingContextFacade.getRecentAlertsByOwnerId(ownerUserId, DEFAULT_ALERT_STATUSES, alertLimit);
+        List<OverviewDashboardSnapshot.AlertSummary> alertSummaries = enrichAlertNames(toAlertSummaries(recentAlerts));
 
         var overall = aggregateAcrossDevices(allDeviceIds.stream().toList());
         Instant updatedAt = overall.recordedAt() != null ? overall.recordedAt() : Instant.now();
@@ -149,15 +113,14 @@ public class OverviewDashboardQueryServiceImpl implements OverviewDashboardQuery
         }
 
         // Dividir entre dispositivos en caché (LIVE) y los que necesitan Snapshot de la DB
-        List<UUID> liveDeviceIds = new ArrayList<>();
         List<UUID> snapshotDeviceIds = new ArrayList<>();
         Map<UUID, DeviceMetricsSnapshot> cachedSnapshots = new HashMap<>();
 
         for (UUID deviceId : deviceIds) {
-            var live = liveMetricsCache.getIfPresent(deviceId);
-            if (live != null && !live.isEmpty()) {
-                liveDeviceIds.add(deviceId);
-                cachedSnapshots.put(deviceId, resolveLiveMetrics(deviceId, live));
+            var live = liveMetricsStore.getIfPresent(deviceId);
+            var window = live == null ? Optional.<KpiLiveMetricsBuffer.Averages>empty() : live.computeAverages();
+            if (window.isPresent()) {
+                cachedSnapshots.put(deviceId, resolveLiveMetrics(window.orElseThrow()));
             } else {
                 snapshotDeviceIds.add(deviceId);
             }
@@ -184,12 +147,11 @@ public class OverviewDashboardQueryServiceImpl implements OverviewDashboardQuery
             }
         }
 
-        return metricsAggregationDomainService.aggregate(allSnapshots);
+        return metricsAggregator.aggregate(allSnapshots);
     }
 
-    private DeviceMetricsSnapshot resolveLiveMetrics(UUID deviceId, com.claircore.analytics.application.internal.services.KpiLiveMetricsBuffer live) {
-        var avg = live.computeAverages();
-        var aqi = aqiCalculationDomainService.calculateAqi(avg.pm2_5(), avg.co2());
+    private DeviceMetricsSnapshot resolveLiveMetrics(KpiLiveMetricsBuffer.Averages avg) {
+        var aqi = aqiCalculator.calculateAqi(avg.pm2_5());
 
         return new DeviceMetricsSnapshot(
                 DeviceMetricsSnapshot.Source.LIVE,
@@ -199,7 +161,7 @@ public class OverviewDashboardQueryServiceImpl implements OverviewDashboardQuery
                 avg.temperature(),
                 avg.humidity(),
                 null, null, null, null,
-                Instant.now()
+                avg.measuredAt()
         );
     }
 

@@ -1,14 +1,11 @@
 package com.claircore.analytics.domain.model.valueobjects;
 
-import jakarta.persistence.Embeddable;
-
 /**
  * Number of readings that fell into each AQI category over a period. Drives the
  * "% of time in category" figure (count / totalReadings) and the dominant
  * category. Stored as counts (not percentages) so monthly cascades can sum the
  * daily breakdowns exactly.
  */
-@Embeddable
 public record AqiCategoryBreakdown(
         long good,
         long moderate,

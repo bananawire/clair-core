@@ -1,14 +1,15 @@
 package com.claircore.billing.application.internal.commandservices;
 
-import com.claircore.billing.domain.gateways.PaymentGateway;
+import com.claircore.billing.application.commandservices.SubscriptionCommandService;
+import com.claircore.billing.application.internal.outboundservices.payments.PaymentGateway;
 import com.claircore.billing.domain.model.aggregates.PaymentRecord;
 import com.claircore.billing.domain.model.commands.CreateCheckoutSessionCommand;
 import com.claircore.billing.domain.model.commands.CreatePaymentIntentCommand;
 import com.claircore.billing.domain.model.commands.DowngradeToFreemiumCommand;
 import com.claircore.billing.domain.model.commands.FulfillSubscriptionCommand;
-import com.claircore.billing.domain.services.SubscriptionCommandService;
-import com.claircore.billing.infrastructure.persistence.jpa.repositories.PaymentRecordRepository;
-import com.claircore.billing.infrastructure.persistence.jpa.repositories.UserPlanRepository;
+import com.claircore.billing.domain.model.valueobjects.PaymentStatus;
+import com.claircore.billing.domain.repositories.PaymentRecordRepository;
+import com.claircore.billing.domain.repositories.UserPlanRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -23,7 +24,9 @@ public class SubscriptionCommandServiceImpl implements SubscriptionCommandServic
     private final PaymentRecordRepository paymentRecordRepository;
     private final UserPlanRepository userPlanRepository;
 
-    public SubscriptionCommandServiceImpl(PaymentGateway paymentGateway, PaymentRecordRepository paymentRecordRepository, UserPlanRepository userPlanRepository) {
+    public SubscriptionCommandServiceImpl(PaymentGateway paymentGateway,
+                                          PaymentRecordRepository paymentRecordRepository,
+                                          UserPlanRepository userPlanRepository) {
         this.paymentGateway = paymentGateway;
         this.paymentRecordRepository = paymentRecordRepository;
         this.userPlanRepository = userPlanRepository;
@@ -39,14 +42,14 @@ public class SubscriptionCommandServiceImpl implements SubscriptionCommandServic
     @Transactional
     public String handle(CreatePaymentIntentCommand command) {
         var result = paymentGateway.createPaymentIntent(command);
-        
+
         var paymentRecord = new PaymentRecord(
                 command.userId(),
                 command.money(),
                 result.paymentIntentId()
         );
         paymentRecordRepository.save(paymentRecord);
-        
+
         return result.clientSecret();
     }
 
@@ -54,11 +57,11 @@ public class SubscriptionCommandServiceImpl implements SubscriptionCommandServic
     @Transactional
     public void handle(FulfillSubscriptionCommand command) {
         log.info("Handling FulfillSubscriptionCommand for paymentIntentId: {}", command.stripePaymentIntentId());
-        
+
         paymentRecordRepository.findByStripePaymentIntentId(command.stripePaymentIntentId())
                 .ifPresentOrElse(
                         paymentRecord -> {
-                            if (paymentRecord.getStatus() == com.claircore.billing.domain.model.valueobjects.PaymentStatus.COMPLETED) {
+                            if (paymentRecord.getStatus() == PaymentStatus.COMPLETED) {
                                 log.info("PaymentRecord with ID: {} is already COMPLETED. Ignoring duplicate webhook.", paymentRecord.getId());
                                 return;
                             }
@@ -68,10 +71,8 @@ public class SubscriptionCommandServiceImpl implements SubscriptionCommandServic
                             paymentRecordRepository.save(paymentRecord);
                             log.info("PaymentRecord with ID: {} successfully updated to COMPLETED.", paymentRecord.getId());
                         },
-                        () -> {
-                            log.warn("PaymentRecord not found for stripePaymentIntentId: {}. Cannot mark as completed.", 
-                                    command.stripePaymentIntentId());
-                        }
+                        () -> log.warn("PaymentRecord not found for stripePaymentIntentId: {}. Cannot mark as completed.",
+                                command.stripePaymentIntentId())
                 );
     }
 

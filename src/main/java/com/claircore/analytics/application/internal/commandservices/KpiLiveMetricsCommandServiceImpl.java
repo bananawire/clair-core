@@ -1,29 +1,29 @@
 package com.claircore.analytics.application.internal.commandservices;
 
-import com.claircore.analytics.application.internal.services.KpiLiveMetricsCache;
+import com.claircore.analytics.application.commandservices.KpiLiveMetricsCommandService;
+import com.claircore.analytics.application.internal.outboundservices.cache.LiveMetricsStore;
 import com.claircore.analytics.domain.model.commands.ProcessTelemetryAnalyticCommand;
 import com.claircore.analytics.domain.model.events.TelemetryReceivedEvent;
-import com.claircore.analytics.domain.services.KpiLiveMetricsCommandService;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 @Service
 public class KpiLiveMetricsCommandServiceImpl implements KpiLiveMetricsCommandService {
 
-    private final KpiLiveMetricsCache liveMetricsCache;
+    private final LiveMetricsStore liveMetricsStore;
     private final ApplicationEventPublisher eventPublisher;
 
     public KpiLiveMetricsCommandServiceImpl(
-            KpiLiveMetricsCache liveMetricsCache,
+            LiveMetricsStore liveMetricsStore,
             ApplicationEventPublisher eventPublisher
     ) {
-        this.liveMetricsCache = liveMetricsCache;
+        this.liveMetricsStore = liveMetricsStore;
         this.eventPublisher = eventPublisher;
     }
 
     @Override
     public void handle(ProcessTelemetryAnalyticCommand command) {
-        var buffer = liveMetricsCache.getOrCreate(command.deviceId().value());
+        var buffer = liveMetricsStore.getOrCreate(command.deviceId().value());
         buffer.add(
                 command.recordedAt(),
                 command.co2(),

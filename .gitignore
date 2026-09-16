@@ -7,3 +7,5 @@ target/
 .idea/
 *.iml
 .vscode/
+provisioned-devices.csv
+.e2e-state.json

@@ -1,11 +1,12 @@
 package com.claircore.analytics.application.internal.outboundservices.acl;
 
 import com.claircore.evaluation.interfaces.acl.EvaluationContextFacade;
+import com.claircore.evaluation.interfaces.acl.HourlyTelemetryAverage;
+import com.claircore.evaluation.interfaces.acl.TelemetryReading;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 
 @Service
 public class ExternalEvaluationService {
@@ -16,7 +17,11 @@ public class ExternalEvaluationService {
         this.evaluationContextFacade = evaluationContextFacade;
     }
 
-    public List<Map<String, Object>> fetchHourlyTelemetryAggregation(Instant start, Instant end) {
+    public List<HourlyTelemetryAverage> fetchHourlyTelemetryAggregation(Instant start, Instant end) {
         return evaluationContextFacade.getHourlyTelemetryAggregation(start, end);
+    }
+
+    public List<TelemetryReading> fetchReadings(Instant start, Instant end) {
+        return evaluationContextFacade.getReadingsBetween(start, end);
     }
 }

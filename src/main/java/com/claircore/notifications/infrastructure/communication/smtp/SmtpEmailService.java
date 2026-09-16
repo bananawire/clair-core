@@ -3,7 +3,7 @@ package com.claircore.notifications.infrastructure.communication.smtp;
 import com.claircore.notifications.domain.model.valueobjects.EmailContent;
 import com.claircore.notifications.domain.model.valueobjects.EmailRecipient;
 import com.claircore.notifications.domain.model.valueobjects.EmailSubject;
-import com.claircore.notifications.domain.services.EmailDeliveryService;
+import com.claircore.notifications.application.internal.outboundservices.email.EmailDeliveryService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;

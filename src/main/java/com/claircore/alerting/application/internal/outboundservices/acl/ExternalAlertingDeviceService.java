@@ -55,6 +55,11 @@ public class ExternalAlertingDeviceService {
         return deviceContextFacade.findSpaceNamesBySpaceIds(spaceIds);
     }
 
+    /** Batch lookup, so a page of alerts costs one call instead of one per alert. */
+    public Map<UUID, String> fetchHardwareIdsByDeviceIds(List<UUID> deviceIds) {
+        return deviceContextFacade.findHardwareIdsByDeviceIds(deviceIds);
+    }
+
     @Cacheable(value = "alerting:device-hardware", key = "#deviceId")
     public Optional<String> fetchHardwareIdByDeviceId(UUID deviceId) {
         return deviceContextFacade.findHardwareIdByDeviceId(deviceId);

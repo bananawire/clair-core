@@ -5,12 +5,12 @@ import com.claircore.iam.domain.model.commands.SignOutCommand;
 import com.claircore.iam.domain.model.queries.GetUserByEmailQuery;
 import com.claircore.iam.domain.model.valueobjects.EmailAddress;
 import com.claircore.iam.domain.model.valueobjects.UserId;
-import com.claircore.iam.domain.services.GoogleAuthenticationCommandService;
-import com.claircore.iam.domain.services.TokenCommandService;
-import com.claircore.iam.domain.services.TokenQueryService;
-import com.claircore.iam.domain.services.UserCommandService;
-import com.claircore.iam.domain.services.UserQueryService;
-import com.claircore.iam.infrastructure.oauth.google.GoogleOAuthStateManager;
+import com.claircore.iam.application.commandservices.GoogleAuthenticationCommandService;
+import com.claircore.iam.application.commandservices.TokenCommandService;
+import com.claircore.iam.application.commandservices.UserCommandService;
+import com.claircore.iam.application.internal.outboundservices.oauth.OAuthStateService;
+import com.claircore.iam.application.queryservices.TokenQueryService;
+import com.claircore.iam.application.queryservices.UserQueryService;
 import com.claircore.iam.interfaces.rest.resources.*;
 import com.claircore.iam.interfaces.rest.transform.*;
 import io.swagger.v3.oas.annotations.Operation;
@@ -48,7 +48,7 @@ public class AuthenticationController {
     private final TokenQueryService tokenQueryService;
     private final GoogleAuthenticationCommandService googleAuthenticationCommandService;
     private final GoogleOAuthCallbackApplicationService googleOAuthCallbackApplicationService;
-    private final GoogleOAuthStateManager googleOAuthStateManager;
+    private final OAuthStateService oAuthStateService;
     private final PasswordEncoder passwordEncoder;
 
     private final String googleClientId;
@@ -63,7 +63,7 @@ public class AuthenticationController {
             TokenQueryService tokenQueryService,
             GoogleAuthenticationCommandService googleAuthenticationCommandService,
             GoogleOAuthCallbackApplicationService googleOAuthCallbackApplicationService,
-            GoogleOAuthStateManager googleOAuthStateManager,
+            OAuthStateService oAuthStateService,
             PasswordEncoder passwordEncoder,
             @Value("${google.oauth.client-id}") String googleClientId,
             @Value("${google.oauth.client-secret}") String googleClientSecret,
@@ -76,7 +76,7 @@ public class AuthenticationController {
         this.tokenQueryService = tokenQueryService;
         this.googleAuthenticationCommandService = googleAuthenticationCommandService;
         this.googleOAuthCallbackApplicationService = googleOAuthCallbackApplicationService;
-        this.googleOAuthStateManager = googleOAuthStateManager;
+        this.oAuthStateService = oAuthStateService;
         this.passwordEncoder = passwordEncoder;
         this.googleClientId = googleClientId;
         this.googleClientSecret = googleClientSecret;
@@ -163,7 +163,7 @@ public class AuthenticationController {
             @ApiResponse(responseCode = "302", description = "Redirects to Google OAuth consent screen")
     })
     public ResponseEntity<Void> googleAuthorize() {
-        String state = googleOAuthStateManager.generateState();
+        String state = oAuthStateService.generateState();
 
         String googleAuthUrl = UriComponentsBuilder
                 .fromHttpUrl("https://accounts.google.com/o/oauth2/v2/auth")
@@ -192,7 +192,7 @@ public class AuthenticationController {
             @RequestParam("state") String state,
             @RequestParam(value = "error", required = false) String error) {
 
-        if (error != null || !googleOAuthStateManager.validateState(state)) {
+        if (error != null || !oAuthStateService.validateState(state)) {
             return redirectToFrontendError();
         }
 

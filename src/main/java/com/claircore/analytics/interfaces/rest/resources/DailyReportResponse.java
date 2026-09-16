@@ -17,16 +17,19 @@ public record DailyReportResponse(
         MetricStatsView humidity,
         @Schema(description = "Highest PM2.5 reading of the day", example = "182.0") Double peakPm2_5,
         @Schema(description = "When the PM2.5 peak occurred") Instant peakPm2_5At,
-        @Schema(description = "Average AQI over the day", example = "62") Integer averageAqi,
+        @Schema(description = "PM2.5 index of the daily mean concentration", example = "62") Integer averageAqi,
         @Schema(description = "Most frequent AQI category", example = "MODERATE") String dominantAqiCategory,
         @Schema(description = "Share of readings in each AQI category") List<CategoryShare> categoryShares,
         @Schema(description = "Number of raw readings aggregated", example = "2873") long readingCount,
         @Schema(description = "AQI change vs the previous day, percent (null if no prior day)", example = "8.1") Double aqiDeltaPct
 ) {
+    @com.fasterxml.jackson.annotation.JsonProperty("indexLabel")
+    public String indexLabel() { return "Indicative PM2.5 index (EPA breakpoints; not NowCast)"; }
+
     @Schema(description = "Average / minimum / maximum of a metric over the period")
     public record MetricStatsView(Double avg, Double min, Double max) {}
 
-    @Schema(description = "How much of the period fell in a given AQI category")
+    @Schema(description = "Share of samples in each PM category; not elapsed time")
     public record CategoryShare(
             @Schema(example = "MODERATE") String category,
             @Schema(example = "1840") long count,

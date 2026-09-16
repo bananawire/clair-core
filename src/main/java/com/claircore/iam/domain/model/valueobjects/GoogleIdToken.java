@@ -1,11 +1,6 @@
 package com.claircore.iam.domain.model.valueobjects;
 
-import jakarta.persistence.Embeddable;
-
-@Embeddable
-public record GoogleIdToken(
-    String token
-) {
+public record GoogleIdToken(String token) {
     public GoogleIdToken {
         if (token == null || token.isBlank()) {
             throw new IllegalArgumentException("Google ID token cannot be null or empty");

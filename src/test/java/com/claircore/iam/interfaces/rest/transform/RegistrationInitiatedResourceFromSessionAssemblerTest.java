@@ -1,6 +1,6 @@
 package com.claircore.iam.interfaces.rest.transform;
 
-import com.claircore.iam.domain.model.entities.RegistrationSession;
+import com.claircore.iam.domain.model.aggregates.RegistrationSession;
 import com.claircore.iam.domain.model.valueobjects.EmailAddress;
 import com.claircore.iam.domain.model.valueobjects.RegistrationSessionId;
 import com.claircore.iam.domain.model.valueobjects.VerificationCode;

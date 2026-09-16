@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -21,10 +20,6 @@ public class ExternalDeviceService {
 
     public ExternalDeviceService(DeviceContextFacade deviceContextFacade) {
         this.deviceContextFacade = deviceContextFacade;
-    }
-
-    public Optional<UUID> findDeviceIdByHardwareId(String hardwareId) {
-        return deviceContextFacade.findDeviceIdByHardwareId(hardwareId);
     }
 
     public boolean isDeviceOwnedByUser(UUID deviceId, UUID userId) {

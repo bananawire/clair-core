@@ -3,14 +3,14 @@ package com.claircore.iam.application.internal.commandservices;
 import com.claircore.iam.application.internal.outboundservices.acl.AsyncNotificationService;
 import com.claircore.iam.domain.model.commands.ConfirmRegistrationCommand;
 import com.claircore.iam.domain.model.commands.InitiateRegistrationCommand;
-import com.claircore.iam.domain.model.entities.RegistrationSession;
-import com.claircore.iam.domain.model.entities.User;
+import com.claircore.iam.application.commandservices.UserCommandService;
+import com.claircore.iam.domain.model.aggregates.RegistrationSession;
+import com.claircore.iam.domain.model.aggregates.User;
 import com.claircore.iam.domain.model.valueobjects.*;
-import com.claircore.iam.domain.services.UserCommandService;
-import com.claircore.iam.infrastructure.persistence.jpa.repositories.UserRepository;
-import com.claircore.iam.infrastructure.persistence.redis.repositories.RegistrationSessionRepository;
+import com.claircore.iam.domain.repositories.RegistrationSessionRepository;
+import com.claircore.iam.domain.repositories.UserRepository;
+import com.claircore.iam.interfaces.events.UserRegisteredIntegrationEvent;
 import org.springframework.context.ApplicationEventPublisher;
-import com.claircore.iam.domain.model.events.UserRegisteredEvent;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -97,8 +97,8 @@ public class UserCommandServiceImpl implements UserCommandService {
         user.activate();
 
         var savedUser = userRepository.save(user);
-        eventPublisher.publishEvent(new UserRegisteredEvent(this, savedUser.getId()));
-        
+        eventPublisher.publishEvent(new UserRegisteredIntegrationEvent(savedUser.getId()));
+
         registrationSessionRepository.deleteById(command.sessionId());
         asyncNotificationService.sendWelcomeEmail(savedUser.getEmail().address());
 

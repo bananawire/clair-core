@@ -1,13 +1,8 @@
 package com.claircore.device.domain.model.valueobjects;
 
-import jakarta.persistence.Embeddable;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import java.math.BigDecimal;
 
-@Embeddable
 public record DeviceMetricThresholdConfiguration(
-        @Enumerated(EnumType.STRING)
         MetricThreshold metric,
         BigDecimal value,
         boolean enabled

@@ -1,12 +1,8 @@
 package com.claircore.notifications.domain.model.valueobjects;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Embeddable;
-
 import java.util.regex.Pattern;
 
-@Embeddable
-public record EmailRecipient(@Column(name = "recipient_email", nullable = false) String address) {
+public record EmailRecipient(String address) {
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$");
 
     public EmailRecipient {

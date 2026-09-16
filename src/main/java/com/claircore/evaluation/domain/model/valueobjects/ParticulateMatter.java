@@ -1,22 +1,13 @@
 package com.claircore.evaluation.domain.model.valueobjects;
 
-import jakarta.persistence.Embeddable;
-
-@Embeddable
-public record ParticulateMatter(
-        Integer pm1_0,
-        Integer pm2_5,
-        Integer pm10
-) {
+public record ParticulateMatter(Double pm1_0, Double pm2_5, Double pm10) {
     public ParticulateMatter {
-        if (pm1_0 == null) {
-            throw new IllegalArgumentException("pm1_0 must not be null");
-        }
-        if (pm2_5 == null) {
-            throw new IllegalArgumentException("pm2_5 must not be null");
-        }
-        if (pm10 == null) {
-            throw new IllegalArgumentException("pm10 must not be null");
-        }
+        requireValid(pm1_0, "pm1_0");
+        requireValid(pm2_5, "pm2_5");
+        requireValid(pm10, "pm10");
+    }
+    private static void requireValid(Double value, String name) {
+        if (value == null || !Double.isFinite(value) || value < 0 || value > 10_000)
+            throw new IllegalArgumentException(name + " must be finite and between 0 and 10000 ug/m3 (indoor product range)");
     }
 }

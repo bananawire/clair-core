@@ -1,12 +1,14 @@
 package com.claircore.notifications.infrastructure.persistence.jpa.repositories;
 
-import com.claircore.notifications.domain.model.entities.EmailLog;
-import com.claircore.notifications.domain.model.entities.PushNotificationLog;
+import com.claircore.notifications.domain.model.aggregates.EmailLog;
+import com.claircore.notifications.domain.model.aggregates.PushNotificationLog;
 import com.claircore.notifications.domain.model.valueobjects.EmailContent;
 import com.claircore.notifications.domain.model.valueobjects.EmailRecipient;
 import com.claircore.notifications.domain.model.valueobjects.EmailSubject;
-import com.claircore.notifications.domain.repositories.EmailLogPersistence;
-import com.claircore.notifications.domain.repositories.PushNotificationHistoryRepository;
+import com.claircore.notifications.domain.repositories.EmailLogRepository;
+import com.claircore.notifications.domain.repositories.PushNotificationLogRepository;
+import com.claircore.notifications.infrastructure.persistence.jpa.adapters.EmailLogRepositoryImpl;
+import com.claircore.notifications.infrastructure.persistence.jpa.adapters.PushNotificationLogRepositoryImpl;
 import com.claircore.shared.infrastructure.config.JpaAuditingConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,10 +18,12 @@ import org.springframework.context.annotation.Import;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/** Exercises the ports through their adapters, which is the only path production code uses. */
 @DataJpaTest
-@Import(JpaAuditingConfiguration.class)
+@Import({JpaAuditingConfiguration.class, EmailLogRepositoryImpl.class, PushNotificationLogRepositoryImpl.class})
 class NotificationRepositoryTest {
 
     @Autowired
@@ -29,24 +33,40 @@ class NotificationRepositoryTest {
     private PushNotificationLogRepository pushNotificationLogRepository;
 
     @Test
-    void shouldFindEmailLogsByRecipientEmail() {
+    void shouldFindEmailLogsByRecipient() {
         var recipient = new EmailRecipient("user@example.com");
-        ((EmailLogPersistence) emailLogRepository).save(EmailLog.sent(recipient, new EmailSubject("Welcome"), new EmailContent("<p>Hello</p>")));
+        emailLogRepository.save(EmailLog.sent(recipient, new EmailSubject("Welcome"), new EmailContent("<p>Hello</p>")));
 
-        var logs = emailLogRepository.findByRecipientEmail(recipient);
+        var logs = emailLogRepository.findByRecipient(recipient);
 
         assertEquals(1, logs.size());
-        assertEquals("user@example.com", logs.getFirst().getRecipientEmail());
+        assertEquals(recipient, logs.getFirst().getRecipientEmail());
+        assertEquals("<p>Hello</p>", logs.getFirst().getContent().html());
     }
 
     @Test
-    void shouldFindPushNotificationLogsByUserId() {
+    void shouldKeepTheIdentityTheAggregateAssignedAndFillTheAuditTimestamps() {
+        var log = EmailLog.sent(new EmailRecipient("user@example.com"), new EmailSubject("Welcome"), new EmailContent("<p>Hello</p>"));
+
+        var saved = emailLogRepository.save(log);
+
+        assertEquals(log.getId(), saved.getId(), "the aggregate assigns the id, not the database");
+        assertNotNull(saved.getCreatedAt());
+        assertNotNull(saved.getUpdatedAt());
+    }
+
+    @Test
+    void shouldPagePushNotificationLogsByUserId() {
         UUID userId = UUID.randomUUID();
-        ((PushNotificationHistoryRepository) pushNotificationLogRepository).save(PushNotificationLog.sent(userId, UUID.randomUUID(), "Title", "Message"));
+        pushNotificationLogRepository.save(PushNotificationLog.sent(userId, UUID.randomUUID(), "Title", "Message"));
+        pushNotificationLogRepository.save(PushNotificationLog.sent(UUID.randomUUID(), UUID.randomUUID(), "Other", "Other"));
 
-        var page = pushNotificationLogRepository.findByUserId(userId, org.springframework.data.domain.PageRequest.of(0, 10));
+        var page = pushNotificationLogRepository.findByUserId(userId, 0, 10);
 
-        assertEquals(1, page.getTotalElements());
-        assertTrue(page.getContent().getFirst().isSent());
+        assertEquals(1, page.total());
+        assertEquals(0, page.page());
+        assertEquals(10, page.size());
+        assertTrue(page.items().getFirst().isSent());
+        assertEquals("Title", page.items().getFirst().getTitle());
     }
 }

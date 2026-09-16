@@ -1,6 +1,6 @@
 package com.claircore.alerting.interfaces.rest.resources;
 
-import com.claircore.alerting.domain.model.entities.Alert;
+import com.claircore.alerting.domain.model.aggregates.Alert;
 import com.claircore.alerting.domain.model.valueobjects.AlertSeverity;
 import com.claircore.alerting.domain.model.valueobjects.AlertStatus;
 import com.claircore.alerting.domain.model.valueobjects.MetricType;
@@ -77,7 +77,7 @@ public record AlertResponse(
                 alert.getDeviceName(),
                 alert.getOccurredAt(),
                 alert.getResolvedAt(),
-                alert.getAuditFields().getCreatedAt().toInstant()
+                alert.getCreatedAt()
         );
     }
 
@@ -105,7 +105,7 @@ public record AlertResponse(
                 deviceName,
                 alert.getOccurredAt(),
                 alert.getResolvedAt(),
-                alert.getAuditFields().getCreatedAt().toInstant()
+                alert.getCreatedAt()
         );
     }
 }

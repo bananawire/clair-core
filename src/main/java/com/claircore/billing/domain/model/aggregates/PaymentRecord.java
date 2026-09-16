@@ -4,60 +4,64 @@ import com.claircore.billing.domain.model.events.SubscriptionPaidEvent;
 import com.claircore.billing.domain.model.valueobjects.Money;
 import com.claircore.billing.domain.model.valueobjects.PaymentStatus;
 import com.claircore.billing.domain.model.valueobjects.UserId;
-import com.claircore.shared.domain.model.entities.AuditableModel;
-import jakarta.persistence.*;
-import org.springframework.data.domain.AbstractAggregateRoot;
-import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+import com.claircore.shared.domain.model.aggregates.AbstractDomainAggregateRoot;
 
+import java.time.Instant;
 import java.util.UUID;
 
-@Entity
-@EntityListeners(AuditingEntityListener.class)
-public class PaymentRecord extends AbstractAggregateRoot<PaymentRecord> {
+/** One attempted payment, from the intent that created it to the confirmation that settles it. */
+public class PaymentRecord extends AbstractDomainAggregateRoot {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @Embedded
-    private UserId userId;
-
-    @Embedded
-    private Money amount;
-
-    @Enumerated(EnumType.STRING)
+    private final UUID id;
+    private final UserId userId;
+    private final Money amount;
     private PaymentStatus status;
+    private final String stripePaymentIntentId;
+    private final Instant createdAt;
+    private final Instant updatedAt;
 
-    private String stripePaymentIntentId;
-
-    @Embedded
-    private PaymentRecordAudit auditFields = new PaymentRecordAudit();
-
-    protected PaymentRecord() {}
-
-    public PaymentRecord(UserId userId, Money amount, String stripePaymentIntentId) {
+    private PaymentRecord(UUID id, UserId userId, Money amount, PaymentStatus status,
+                          String stripePaymentIntentId, Instant createdAt, Instant updatedAt) {
+        if (id == null) {
+            throw new IllegalArgumentException("Id must not be null");
+        }
+        if (userId == null) {
+            throw new IllegalArgumentException("User ID must not be null");
+        }
+        this.id = id;
         this.userId = userId;
         this.amount = amount;
+        this.status = status;
         this.stripePaymentIntentId = stripePaymentIntentId;
-        this.status = PaymentStatus.PENDING;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+    }
+
+    public PaymentRecord(UserId userId, Money amount, String stripePaymentIntentId) {
+        this(UUID.randomUUID(), userId, amount, PaymentStatus.PENDING, stripePaymentIntentId, null, null);
+    }
+
+    /** Rebuilds a record that already exists in storage, identity and audit timestamps included. */
+    public static PaymentRecord reconstitute(UUID id, UserId userId, Money amount, PaymentStatus status,
+                                             String stripePaymentIntentId, Instant createdAt, Instant updatedAt) {
+        return new PaymentRecord(id, userId, amount, status, stripePaymentIntentId, createdAt, updatedAt);
     }
 
     public void markAsCompleted() {
-        if (this.status == PaymentStatus.PENDING) {
-            this.status = PaymentStatus.COMPLETED;
-            this.registerEvent(new SubscriptionPaidEvent(this, this.stripePaymentIntentId, this.userId));
-        } else {
+        if (this.status != PaymentStatus.PENDING) {
             throw new IllegalStateException("PaymentRecord can only be completed from PENDING status");
         }
+        this.status = PaymentStatus.COMPLETED;
+        registerEvent(new SubscriptionPaidEvent(this.stripePaymentIntentId, this.userId));
     }
 
-    // Getters
     public UUID getId() { return id; }
     public UserId getUserId() { return userId; }
     public Money getAmount() { return amount; }
     public PaymentStatus getStatus() { return status; }
     public String getStripePaymentIntentId() { return stripePaymentIntentId; }
 
-    @Embeddable
-    public static class PaymentRecordAudit extends AuditableModel {}
+    /** Null until the record has been written; assigned by persistence auditing. */
+    public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
 }

@@ -1,9 +1,10 @@
 package com.claircore.analytics.application.internal.queryservices;
 
+import com.claircore.analytics.application.queryservices.KpiHistoricalTrendQueryService;
 import com.claircore.analytics.domain.model.queries.GetHistoricalTrendQuery;
 import com.claircore.analytics.domain.model.valueobjects.KpiTrendPoint;
-import com.claircore.analytics.domain.services.KpiHistoricalTrendQueryService;
-import com.claircore.analytics.infrastructure.persistence.jpa.repositories.DeviceAnalyticsSnapshotRepository;
+import com.claircore.analytics.domain.model.valueobjects.TrendPeriod;
+import com.claircore.analytics.domain.repositories.DeviceAnalyticsSnapshotRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +15,8 @@ import java.util.List;
 @Service
 public class KpiHistoricalTrendQueryServiceImpl implements KpiHistoricalTrendQueryService {
 
+    private static final Duration DEFAULT_WINDOW = Duration.ofDays(1);
+
     private final DeviceAnalyticsSnapshotRepository snapshotRepository;
 
     public KpiHistoricalTrendQueryServiceImpl(DeviceAnalyticsSnapshotRepository snapshotRepository) {
@@ -23,33 +26,13 @@ public class KpiHistoricalTrendQueryServiceImpl implements KpiHistoricalTrendQue
     @Override
     @Transactional(readOnly = true)
     public List<KpiTrendPoint> handle(GetHistoricalTrendQuery query) {
-        Instant start;
-        Instant end;
+        boolean hasExplicitWindow = query.startDate() != null && query.endDate() != null;
+        Instant end = hasExplicitWindow ? query.endDate() : Instant.now();
+        Instant start = hasExplicitWindow ? query.startDate() : end.minus(windowOf(query.period()));
 
-        if (query.startDate() != null && query.endDate() != null) {
-            start = query.startDate();
-            end = query.endDate();
-        } else {
-            Instant now = Instant.now();
-            end = now;
-            if (query.period() != null) {
-                start = switch (query.period()) {
-                    case DAY -> now.minus(Duration.ofDays(1));
-                    case WEEK -> now.minus(Duration.ofDays(7));
-                    case MONTH -> now.minus(Duration.ofDays(30));
-                };
-            } else {
-                start = now.minus(Duration.ofDays(1));
-            }
-        }
-
-        var pageable = query.limit() != null ? org.springframework.data.domain.PageRequest.of(0, query.limit()) : org.springframework.data.domain.Pageable.unpaged();
-
-        var snapshots = snapshotRepository.findByDeviceIdAndTimeWindowStartBetween(
-                query.deviceId().value(), start, end, pageable
-        );
-
-        return snapshots.stream()
+        return snapshotRepository
+                .findByDeviceIdAndWindowStartBetween(query.deviceId().value(), start, end, query.limit())
+                .stream()
                 .map(s -> new KpiTrendPoint(
                         s.getTimeWindowStart(),
                         (double) s.getCalculatedAqi().value(),
@@ -59,5 +42,15 @@ public class KpiHistoricalTrendQueryServiceImpl implements KpiHistoricalTrendQue
                         s.getAverageHumidity()
                 ))
                 .toList();
+    }
+
+    /** LIVE has no stored snapshots of its own, so it reads the same window as DAY. */
+    private static Duration windowOf(TrendPeriod period) {
+        if (period == null) return DEFAULT_WINDOW;
+        return switch (period) {
+            case LIVE, DAY -> DEFAULT_WINDOW;
+            case WEEK -> Duration.ofDays(7);
+            case MONTH -> Duration.ofDays(30);
+        };
     }
 }

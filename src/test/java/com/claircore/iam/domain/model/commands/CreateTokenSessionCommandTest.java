@@ -1,6 +1,6 @@
 package com.claircore.iam.domain.model.commands;
 
-import com.claircore.iam.domain.model.entities.User;
+import com.claircore.iam.domain.model.aggregates.User;
 import com.claircore.iam.domain.model.valueobjects.EmailAddress;
 import com.claircore.iam.domain.model.valueobjects.Password;
 import com.claircore.iam.domain.model.valueobjects.TokenType;

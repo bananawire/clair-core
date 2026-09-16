@@ -16,6 +16,11 @@ public interface DeviceContextFacade {
     Optional<String> findHardwareIdByDeviceId(UUID deviceId);
 
     boolean isDeviceOwnedByUser(UUID deviceId, UUID userId);
+    /**
+     * The instant from which readings of this device belong to its current owner. Consumers must
+     * not show anything recorded earlier to that owner: it was measured for someone else.
+     */
+    Optional<java.time.Instant> findVisibleSinceByDeviceId(UUID deviceId);
 
     Optional<UUID> findOwnerIdByDeviceId(UUID deviceId);
 
@@ -38,6 +43,12 @@ public interface DeviceContextFacade {
     Map<UUID, String> findSpaceNamesBySpaceIds(List<UUID> spaceIds);
 
     /**
+     * Batch lookup, added so alerting can attach hardware ids to a page of alerts without joining
+     * the {@code devices} table from its own query.
+     */
+    Map<UUID, String> findHardwareIdsByDeviceIds(List<UUID> deviceIds);
+
+    /**
      * Ownership-scoped organization summaries for read models.
      */
     List<OrganizationSummary> findOrganizationsByOwnerId(UUID ownerUserId);
@@ -51,4 +62,30 @@ public interface DeviceContextFacade {
      * Device IDs assigned to a space (bounded by limit) for read models.
      */
     List<UUID> findDeviceIdsBySpaceId(UUID spaceId, int limit);
+
+    /**
+     * Returns up to {@code limit} telemetry targets ordered by id, skipping deleted devices. The
+     * LocalEdge bounded context uses this for one cycle; the result never couples the caller to
+     * any aggregate the device BC owns internally.
+     *
+     * @param limit                hard cap on the page size; bounded to 1..500 by the implementation
+     * @param includeDeleted       whether deleted inventory rows are included
+     */
+    List<DeviceTelemetryTarget> findTelemetryTargets(int limit, boolean includeDeleted);
+
+    /**
+     * Records one device presence event in occurrence order. Unknown strings are rejected.
+     */
+    void recordDevicePresence(java.util.UUID deviceId, String status, java.time.Instant occurredAt);
+
+    /** Returns a bounded page of pending or lease-expired commands for the in-process edge. */
+    List<DeviceCommandForEdge> findClaimableCommands(java.time.Instant leaseCutoff, int limit);
+
+    /** Atomically claims one command and refreshes its SENT lease. */
+    Optional<DeviceCommandForEdge> claimCommand(UUID commandId, java.time.Instant leaseCutoff,
+                                                 java.time.Instant claimedAt);
+
+    /** Applies an EXECUTED or FAILED result; terminal acknowledgements are idempotent. */
+    Optional<DeviceCommandForEdge> acknowledgeCommand(UUID deviceId, UUID commandId,
+                                                       String status, String failureReason);
 }

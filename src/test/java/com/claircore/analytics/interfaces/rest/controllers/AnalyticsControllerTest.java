@@ -1,14 +1,14 @@
 package com.claircore.analytics.interfaces.rest.controllers;
 
-import com.claircore.analytics.application.internal.services.AnalyticsSseService;
+import com.claircore.analytics.interfaces.rest.sse.AnalyticsSseService;
 import com.claircore.analytics.domain.model.queries.GetDashboardMetricsQuery;
 import com.claircore.analytics.domain.model.queries.GetHistoricalTrendQuery;
 import com.claircore.analytics.domain.model.valueobjects.AirQualityIndex;
 import com.claircore.analytics.domain.model.valueobjects.AqiCategory;
 import com.claircore.analytics.domain.model.valueobjects.KpiDashboardMetrics;
 import com.claircore.analytics.domain.model.valueobjects.MetricTrend;
-import com.claircore.analytics.domain.services.KpiDashboardMetricsQueryService;
-import com.claircore.analytics.domain.services.KpiHistoricalTrendQueryService;
+import com.claircore.analytics.application.queryservices.KpiDashboardMetricsQueryService;
+import com.claircore.analytics.application.queryservices.KpiHistoricalTrendQueryService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
@@ -48,7 +48,7 @@ class AnalyticsControllerTest {
     private AnalyticsSseService analyticsSseService;
 
     @MockitoBean
-    private com.claircore.iam.domain.services.TokenQueryService tokenQueryService;
+    private com.claircore.iam.application.queryservices.TokenQueryService tokenQueryService;
 
     @MockitoBean
     private com.claircore.iam.infrastructure.tokens.jwt.JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -129,6 +129,25 @@ class AnalyticsControllerTest {
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.aqiValue").value(55));
+    }
+
+    @Test
+    void shouldReturn400WhenPeriodIsNotARecognisedWindow() throws Exception {
+        mockMvc.perform(get("/api/v1/analytics/devices/{deviceId}/historical", UUID.randomUUID())
+                        .param("period", "fortnight")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldAcceptALowercasePeriodAsItAlwaysHas() throws Exception {
+        when(kpiHistoricalTrendQueryService.handle(any(GetHistoricalTrendQuery.class)))
+                .thenReturn(Collections.emptyList());
+
+        mockMvc.perform(get("/api/v1/analytics/devices/{deviceId}/trends", UUID.randomUUID())
+                        .param("period", "week")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
     }
 
     @Test

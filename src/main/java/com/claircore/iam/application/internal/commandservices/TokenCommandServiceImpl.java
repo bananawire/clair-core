@@ -1,13 +1,13 @@
 package com.claircore.iam.application.internal.commandservices;
 
 import com.claircore.iam.domain.model.commands.SignOutCommand;
-import com.claircore.iam.domain.model.entities.TokenSession;
-import com.claircore.iam.domain.model.entities.User;
+import com.claircore.iam.application.commandservices.TokenCommandService;
+import com.claircore.iam.application.internal.outboundservices.tokens.TokenService;
+import com.claircore.iam.domain.model.aggregates.TokenSession;
+import com.claircore.iam.domain.model.aggregates.User;
 import com.claircore.iam.domain.model.valueobjects.TokenJti;
 import com.claircore.iam.domain.model.valueobjects.TokenType;
-import com.claircore.iam.domain.services.TokenCommandService;
-import com.claircore.iam.infrastructure.persistence.redis.repositories.TokenSessionRepository;
-import com.claircore.iam.infrastructure.tokens.jwt.JwtTokenEncoder;
+import com.claircore.iam.domain.repositories.TokenSessionRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,18 +18,18 @@ import java.util.Optional;
 @Service
 public class TokenCommandServiceImpl implements TokenCommandService {
 
-    private final JwtTokenEncoder jwtTokenEncoder;
+    private final TokenService tokenService;
     private final TokenSessionRepository tokenSessionRepository;
     private final long accessTtlMillis;
     private final long refreshTtlMillis;
 
     public TokenCommandServiceImpl(
-            JwtTokenEncoder jwtTokenEncoder,
+            TokenService tokenService,
             TokenSessionRepository tokenSessionRepository,
             @Value("${jwt.expiration}") long accessTtlMillis,
             @Value("${jwt.refresh-expiration}") long refreshTtlMillis
     ) {
-        this.jwtTokenEncoder = jwtTokenEncoder;
+        this.tokenService = tokenService;
         this.tokenSessionRepository = tokenSessionRepository;
         this.accessTtlMillis = accessTtlMillis;
         this.refreshTtlMillis = refreshTtlMillis;
@@ -45,7 +45,7 @@ public class TokenCommandServiceImpl implements TokenCommandService {
         TokenSession session = new TokenSession(jti, user.getEmail(), user.getId(), TokenType.ACCESS, now, expiresAt);
         tokenSessionRepository.replaceForUser(session);
 
-        return jwtTokenEncoder.generateToken(user.getId(), accessTtlMillis, jti.jti());
+        return tokenService.generateAccessToken(user.getId(), accessTtlMillis, jti.jti());
     }
 
     @Override
@@ -58,28 +58,28 @@ public class TokenCommandServiceImpl implements TokenCommandService {
         TokenSession session = new TokenSession(jti, user.getEmail(), user.getId(), TokenType.REFRESH, now, expiresAt);
         tokenSessionRepository.replaceForUser(session);
 
-        return jwtTokenEncoder.generateRefreshToken(user.getId(), refreshTtlMillis, jti.jti());
+        return tokenService.generateRefreshToken(user.getId(), refreshTtlMillis, jti.jti());
     }
 
     @Override
     @Transactional
     public void invalidateAccessToken(String jwtToken) {
-        jwtTokenEncoder.extractJti(jwtToken)
+        tokenService.extractJti(jwtToken)
                 .ifPresent(jti -> tokenSessionRepository.deleteByJti(new TokenJti(jti), TokenType.ACCESS));
     }
 
     @Override
     @Transactional
     public void invalidateRefreshToken(String jwtToken) {
-        jwtTokenEncoder.extractJti(jwtToken)
+        tokenService.extractJti(jwtToken)
                 .ifPresent(jti -> tokenSessionRepository.deleteByJti(new TokenJti(jti), TokenType.REFRESH));
     }
 
     @Override
     @Transactional
     public Optional<String> rotateRefreshToken(String refreshTokenJwt) {
-        Optional<String> jtiOpt = jwtTokenEncoder.extractJti(refreshTokenJwt);
-        Optional<String> typeOpt = jwtTokenEncoder.extractType(refreshTokenJwt);
+        Optional<String> jtiOpt = tokenService.extractJti(refreshTokenJwt);
+        Optional<String> typeOpt = tokenService.extractType(refreshTokenJwt);
 
         if (jtiOpt.isEmpty() || typeOpt.isEmpty() || !"refresh".equals(typeOpt.get())) {
             return Optional.empty();
@@ -99,7 +99,7 @@ public class TokenCommandServiceImpl implements TokenCommandService {
         TokenSession newSession = new TokenSession(newJti, existingSession.get().email(), existingSession.get().userId(), TokenType.REFRESH, now, expiresAt);
         tokenSessionRepository.replaceForUser(newSession);
 
-        return Optional.of(jwtTokenEncoder.generateRefreshToken(existingSession.get().userId(), refreshTtlMillis, newJti.jti()));
+        return Optional.of(tokenService.generateRefreshToken(existingSession.get().userId(), refreshTtlMillis, newJti.jti()));
     }
 
     @Override

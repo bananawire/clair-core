@@ -1,10 +1,10 @@
 package com.claircore.iam.application.internal.queryservices;
 
-import com.claircore.iam.domain.model.entities.TokenSession;
+import com.claircore.iam.domain.model.aggregates.TokenSession;
 import com.claircore.iam.domain.model.valueobjects.EmailAddress;
 import com.claircore.iam.domain.model.valueobjects.TokenJti;
 import com.claircore.iam.domain.model.valueobjects.TokenType;
-import com.claircore.iam.infrastructure.persistence.redis.repositories.TokenSessionRepository;
+import com.claircore.iam.domain.repositories.TokenSessionRepository;
 import com.claircore.iam.infrastructure.tokens.jwt.JwtTokenEncoder;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

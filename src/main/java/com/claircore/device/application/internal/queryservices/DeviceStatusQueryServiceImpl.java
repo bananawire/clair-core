@@ -1,9 +1,9 @@
 package com.claircore.device.application.internal.queryservices;
 
-import com.claircore.device.domain.model.entities.DeviceAssignment;
+import com.claircore.device.domain.model.aggregates.DeviceAssignment;
 import com.claircore.device.domain.model.queries.GetDeviceStatusByDeviceIdForUserQuery;
-import com.claircore.device.domain.services.DeviceStatusQueryService;
-import com.claircore.device.infrastructure.persistence.jpa.repositories.DeviceAssignmentRepository;
+import com.claircore.device.application.queryservices.DeviceStatusQueryService;
+import com.claircore.device.domain.repositories.DeviceAssignmentRepository;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

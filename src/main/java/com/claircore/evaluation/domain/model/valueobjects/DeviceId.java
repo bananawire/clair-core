@@ -1,10 +1,7 @@
 package com.claircore.evaluation.domain.model.valueobjects;
 
-import jakarta.persistence.Embeddable;
-
 import java.util.UUID;
 
-@Embeddable
 public record DeviceId(UUID value) {
     public DeviceId {
         if (value == null) {

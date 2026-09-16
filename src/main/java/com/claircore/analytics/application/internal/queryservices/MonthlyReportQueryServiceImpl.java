@@ -1,9 +1,9 @@
 package com.claircore.analytics.application.internal.queryservices;
 
-import com.claircore.analytics.domain.model.entities.DeviceMonthlySummary;
+import com.claircore.analytics.application.queryservices.MonthlyReportQueryService;
+import com.claircore.analytics.domain.model.aggregates.DeviceMonthlySummary;
 import com.claircore.analytics.domain.model.queries.GetMonthlyReportQuery;
-import com.claircore.analytics.domain.services.MonthlyReportQueryService;
-import com.claircore.analytics.infrastructure.persistence.jpa.repositories.DeviceMonthlySummaryRepository;
+import com.claircore.analytics.domain.repositories.DeviceMonthlySummaryRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

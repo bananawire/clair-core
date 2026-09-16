@@ -1,6 +1,6 @@
 package com.claircore.billing.infrastructure.stripe;
 
-import com.claircore.billing.domain.gateways.PaymentGateway;
+import com.claircore.billing.application.internal.outboundservices.payments.PaymentGateway;
 import com.claircore.billing.domain.model.commands.CreateCheckoutSessionCommand;
 import com.claircore.billing.domain.model.commands.CreatePaymentIntentCommand;
 import com.stripe.Stripe;

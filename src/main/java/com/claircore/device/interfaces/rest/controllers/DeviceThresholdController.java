@@ -7,8 +7,8 @@ import com.claircore.device.domain.model.valueobjects.DeviceMetricThresholdConfi
 import com.claircore.device.domain.model.valueobjects.MetricThreshold;
 import com.claircore.device.domain.model.valueobjects.DeviceThresholdWriteIntent;
 import com.claircore.device.domain.model.valueobjects.UserId;
-import com.claircore.device.domain.services.DeviceThresholdCommandService;
-import com.claircore.device.domain.services.DeviceThresholdQueryService;
+import com.claircore.device.application.commandservices.DeviceThresholdCommandService;
+import com.claircore.device.application.queryservices.DeviceThresholdQueryService;
 import com.claircore.device.interfaces.rest.resources.DeviceThresholdResponse;
 import com.claircore.device.interfaces.rest.resources.UpdateDeviceThresholdRequest;
 import io.swagger.v3.oas.annotations.Operation;

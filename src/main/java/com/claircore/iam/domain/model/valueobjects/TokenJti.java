@@ -1,18 +1,9 @@
 package com.claircore.iam.domain.model.valueobjects;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.persistence.Embeddable;
-
 import java.util.UUID;
 
-@Embeddable
-public record TokenJti(
-    String jti
-) {
-    @JsonCreator
-    public TokenJti(@JsonProperty("jti") String jti) {
-        this.jti = jti;
+public record TokenJti(String jti) {
+    public TokenJti {
         if (jti == null || jti.isBlank()) {
             throw new IllegalArgumentException("Token JTI cannot be null or empty");
         }

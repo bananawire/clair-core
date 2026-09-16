@@ -1,5 +1,6 @@
 package com.claircore.iam.infrastructure.oauth.google;
 
+import com.claircore.iam.application.internal.outboundservices.oauth.GoogleTokenExchange;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -13,7 +14,7 @@ import java.util.Map;
 import java.util.Optional;
 
 @Component
-public class GoogleAuthorizationCodeTokenClient {
+public class GoogleAuthorizationCodeTokenClient implements GoogleTokenExchange {
 
     private static final String TOKEN_URL = "https://oauth2.googleapis.com/token";
 
@@ -27,6 +28,7 @@ public class GoogleAuthorizationCodeTokenClient {
         this.restTemplate = restTemplate;
     }
 
+    @Override
     public Optional<String> exchangeCodeForIdToken(String code, String clientId, String clientSecret, String redirectUri) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);

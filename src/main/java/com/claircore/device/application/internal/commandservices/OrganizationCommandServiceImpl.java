@@ -4,12 +4,13 @@ import com.claircore.device.application.internal.outboundservices.acl.ExternalBi
 import com.claircore.device.domain.model.commands.CreateOrganizationCommand;
 import com.claircore.device.domain.model.commands.DeleteOrganizationCommand;
 import com.claircore.device.domain.model.commands.UpdateOrganizationNameCommand;
-import com.claircore.device.domain.model.entities.Organization;
+import com.claircore.device.domain.model.aggregates.Organization;
 import com.claircore.device.domain.model.valueobjects.UserId;
-import com.claircore.device.domain.services.OrganizationCommandService;
-import com.claircore.device.infrastructure.persistence.jpa.repositories.DeviceAssignmentRepository;
-import com.claircore.device.infrastructure.persistence.jpa.repositories.OrganizationRepository;
-import com.claircore.device.infrastructure.persistence.jpa.repositories.SpaceRepository;
+import com.claircore.device.application.commandservices.OrganizationCommandService;
+import com.claircore.device.domain.repositories.DeviceAssignmentRepository;
+import com.claircore.device.domain.repositories.OrganizationRepository;
+import com.claircore.device.domain.repositories.SpaceRepository;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -64,6 +65,7 @@ public class OrganizationCommandServiceImpl implements OrganizationCommandServic
         Organization organization = organizationRepository
             .findById(command.organizationId())
             .orElseThrow(() -> new IllegalArgumentException("Organization not found"));
+        requireOwner(organization, command.userId());
 
         if (deviceAssignmentRepository.existsByOrganizationId(command.organizationId())) {
             throw new IllegalStateException(
@@ -72,7 +74,7 @@ public class OrganizationCommandServiceImpl implements OrganizationCommandServic
         }
 
         spaceRepository.deleteByOrganizationId(command.organizationId());
-        organizationRepository.delete(organization);
+        organizationRepository.deleteById(organization.getId());
     }
 
     @Override
@@ -81,9 +83,16 @@ public class OrganizationCommandServiceImpl implements OrganizationCommandServic
         Organization organization = organizationRepository
             .findById(command.organizationId())
             .orElseThrow(() -> new IllegalArgumentException("Organization not found"));
+        requireOwner(organization, command.userId());
 
         organization.updateName(command.name());
         organizationRepository.save(organization);
+    }
+
+    private static void requireOwner(Organization organization, UserId userId) {
+        if (!userId.equals(organization.getOwnerUserId())) {
+            throw new AccessDeniedException("Organization does not belong to user");
+        }
     }
 
     @Override

@@ -1,10 +1,10 @@
 package com.claircore.iam.application.internal.queryservices;
 
-import com.claircore.iam.domain.model.entities.User;
+import com.claircore.iam.domain.model.aggregates.User;
 import com.claircore.iam.domain.model.queries.GetUserByEmailQuery;
 import com.claircore.iam.domain.model.valueobjects.EmailAddress;
 import com.claircore.iam.domain.model.valueobjects.Password;
-import com.claircore.iam.infrastructure.persistence.jpa.repositories.UserRepository;
+import com.claircore.iam.domain.repositories.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

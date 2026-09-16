@@ -1,9 +1,9 @@
 package com.claircore.analytics.application.internal.queryservices;
 
-import com.claircore.analytics.domain.model.entities.DeviceDailySummary;
+import com.claircore.analytics.application.queryservices.DailyReportQueryService;
+import com.claircore.analytics.domain.model.aggregates.DeviceDailySummary;
 import com.claircore.analytics.domain.model.queries.GetDailyReportQuery;
-import com.claircore.analytics.domain.services.DailyReportQueryService;
-import com.claircore.analytics.infrastructure.persistence.jpa.repositories.DeviceDailySummaryRepository;
+import com.claircore.analytics.domain.repositories.DeviceDailySummaryRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

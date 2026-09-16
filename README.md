@@ -33,6 +33,8 @@ DB_PASSWORD=admin
 # Redis
 REDIS_HOST=localhost
 REDIS_PORT=6379
+REDIS_USERNAME=default
+REDIS_PASSWORD=your_redis_password
 
 # SMTP Email (Resend)
 SMTP_HOST=smtp.resend.com
@@ -40,24 +42,104 @@ SMTP_PORT=465
 SMTP_USERNAME=resend
 SMTP_PASSWORD=your_resend_api_key
 SMTP_FROM=noreply@yourdomain.com
+SMTP_AUTH=true
+SMTP_SSL=true
+SMTP_STARTTLS=false
 
 # JWT
 JWT_SECRET=your_super_secret_jwt_key_that_is_at_least_32_characters_long
 JWT_EXPIRATION=3600000
 JWT_REFRESH_EXPIRATION=604800000
 
-# Core -> Edge webhook (hint only; edge reconciles over HTTP)
-EDGE_WEBHOOK_URL=http://127.0.0.1:5000
-# Core -> Edge token (must match EDGE_TOKEN in edge)
-EDGE_TOKEN=change-me-long-random-secret
-# Edge -> Core token (must match EDGE_TO_CORE_TOKEN in edge)
-EDGE_TO_CORE_TOKEN=change-me-long-random-secret
-
 # CORS — tu web app Angular
 CORS_ALLOWED_ORIGINS=http://localhost:4200
+
+# LocalEdge synthetic telemetry and in-process command simulator (disabled by default)
+CLAIRCORE_LOCAL_EDGE_ENABLED=false
+CLAIRCORE_LOCAL_EDGE_INTERVAL_MS=15000
+CLAIRCORE_LOCAL_EDGE_INITIAL_DELAY_MS=15000
+CLAIRCORE_LOCAL_EDGE_SCENARIO=MIXED
+CLAIRCORE_LOCAL_EDGE_SEED=0
+CLAIRCORE_LOCAL_EDGE_TARGET_LIMIT=50
+CLAIRCORE_LOCAL_EDGE_COMMAND_POLL_MS=5000
+CLAIRCORE_LOCAL_EDGE_COMMAND_BATCH_SIZE=25
+CLAIRCORE_LOCAL_EDGE_COMMAND_LEASE_SECONDS=60
+
+# Google OAuth 2.0
+GOOGLE_OAUTH_CLIENT_ID=your_google_client_id
+GOOGLE_OAUTH_ALLOWED_CLIENT_IDS=your_google_client_id
+GOOGLE_OAUTH_CLIENT_SECRET=your_google_client_secret
+GOOGLE_REDIRECT_URI=http://localhost:49220/api/v1/auth/google/callback
+
+# Frontend redirects
+FRONTEND_URL=http://localhost:4200
+
+# Stripe
+STRIPE_PRIVATE_KEY=sk_test_your_stripe_private_key
+STRIPE_PUBLIC_KEY=pk_test_your_stripe_public_key
+STRIPE_WEBHOOK_SECRET=whsec_your_stripe_webhook_secret
+
+# OneSignal
+ONESIGNAL_API_URL=https://onesignal.com/api/v1/notifications
+ONESIGNAL_REST_API_KEY=your_onesignal_rest_api_key
+ONESIGNAL_APP_ID=your_onesignal_app_id
+ONESIGNAL_FRONTEND_URL=http://localhost:4200
+
+# Factory inventory (optional). CSV columns: serial_number,hardware_id,api_key,name
+DEVICE_PROVISIONING_IMPORT_PATH=
+# Where the demo profile writes its generated inventory (contains API keys; keep it out of git)
+DEVICE_PROVISIONING_EXPORT_PATH=provisioned-devices.csv
+
+# Flyway
+FLYWAY_BASELINE_ON_MIGRATE=false
+LEGACY_AUDIT_ZONE=UTC
 ```
 
-> ⚠️ **Importante:** Si borraste la base de datos, la primera vez corre con `ddl-auto: update` en `application.yml`. Cuando arranque bien, cámbialo a `validate`.
+## Device inventory and the demo profile
+
+Devices exist in the core before anyone registers them. There are two ways to get them there:
+
+- **Import** a CSV at startup by setting `DEVICE_PROVISIONING_IMPORT_PATH`. Rows already present
+  (same serial number or hardware id) are skipped, so the file can stay configured permanently.
+- **Demo profile**: run with `SPRING_PROFILES_ACTIVE=demo` and the core seeds five units
+  `CLAIR-0001`..`CLAIR-0005` with fresh API keys, then writes the whole inventory including keys to
+  `DEVICE_PROVISIONING_EXPORT_PATH`. Flash a hardware id and its key into the firmware from that file.
+  Without the profile nothing is seeded.
+
+Registering a device in the app is a two-step ownership handshake, not discovery: `POST /api/v1/devices/pair`
+with the hardware id returns a one-time claim token; `POST /api/v1/devices/claim` with that token and one of
+your spaces makes you the owner. Telemetry from a unit that is in inventory but not yet claimed is accepted
+and stored against the device; it becomes visible to whoever claims it only from the moment of that claim.
+
+Database schemas are managed by Flyway. Empty databases migrate automatically on startup;
+Hibernate validates the resulting schema. For an existing installation, follow
+[the migration instructions](docs/audit/migrations.md) before its first Flyway deployment.
+
+## Running on one laptop (local profile)
+
+Start PostgreSQL, Redis and Mailpit with the compose file in the parent directory, then run the
+core with the `local` profile. Every external integration has an explicit disabled behaviour:
+Google login is refused (placeholder client id), Stripe checkout fails and plans stay FREEMIUM,
+push notifications fail and are logged, and sign-up emails land in Mailpit at http://localhost:8025.
+Synthetic telemetry is disabled by default; enable it explicitly for the demo run. It starts after
+15 seconds and emits one reading per device every 15 seconds. Each reading follows an AR(1) process
+with a sinusoidal seasonal mean and occasional exogenous shocks (cooking → PM2.5, occupancy → CO₂),
+so consecutive readings drift smoothly instead of jumping band-to-band.
+
+```bash
+docker compose -f docker-compose.local.yml up -d
+CLAIRCORE_LOCAL_EDGE_ENABLED=true SPRING_PROFILES_ACTIVE=local,demo mvn spring-boot:run
+```
+
+The override is read directly from the Spring property `claircore.local-edge.enabled`
+(see `application.yml`). If you'd rather not pass it on the command line, flip that key
+to `true` in `application.yml` for the run.
+
+The local synthetic generator is not an external edge integration; it writes directly through the
+Device and Evaluation bounded-context interfaces.
+
+`SMTP_AUTH`, `SMTP_SSL` and `SMTP_STARTTLS` control the mail transport in every profile. The full
+laptop runbook, including the edge and the device, is `docs/RUNBOOK.md`.
 
 ## Compile the Project
 
@@ -248,8 +330,25 @@ java -jar target/clair-core-1.0.0.jar
 
 ## Security Checklist for Production
 
-- [ ] Change `ddl-auto` from `update` to `validate` in `application.yml`
+- [ ] Follow the Flyway adoption instructions for an existing database
 - [ ] Rotate the JWT secret (minimum 32 characters)
 - [ ] Rotate the Resend API key
 - [ ] Restrict `CORS_ALLOWED_ORIGINS` to your real domain(s)
 - [ ] Enable HTTPS (HSTS is already configured)
+
+## Verification
+
+`mvn clean verify` runs the unit tests, JPA tests, complete application-context test, and
+architecture rules. H2 tests use H2's dialect, with Flyway disabled.
+
+To include PostgreSQL migration and roster integration tests, point these variables at a
+**disposable test database** (the tests create and remove their own schemas):
+
+```sh
+export CLAIR_TEST_POSTGRES_URL=jdbc:postgresql://localhost:5432/clair_test
+export CLAIR_TEST_POSTGRES_USER=clair_test
+export CLAIR_TEST_POSTGRES_PASSWORD=clair_test
+mvn clean verify
+```
+
+CI supplies PostgreSQL 15 and runs these checks on every build.

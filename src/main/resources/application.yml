@@ -1,0 +1,39 @@
+# ---------------------------------------------------------------------------
+# Spring Boot — Flyway configuration for clair-core.
+#
+# Project rule (see agents.md): one migration file per bounded context and one
+# seed file per feature. Migration files live under classpath:db/migration
+# (V__ versioned history + R__ repeatable canonical schema per BC). Seed files
+# live under classpath:db/seed (R__ repeatable feature seeds, idempotent via
+# ON CONFLICT DO NOTHING).
+# ---------------------------------------------------------------------------
+
+spring:
+  flyway:
+    # Versioned history (V1..V6) is the immutable baseline that built the
+    # schema. Repeatable migrations (R__<bc>.sql) re-run only when their
+    # checksum changes, which is the only way to honour "edit that file when
+    # the schema changes" without breaking Flyway's checksum validation on
+    # existing deployments.
+    locations: classpath:db/migration,classpath:db/seed
+
+    # Placeholder used by V2__audit_instants_and_device_integrity.sql to
+    # interpret legacy wall-clock audit timestamps written by the previous
+    # deployment. Defaults to UTC so empty databases migrate safely; existing
+    # installations must set LEGACY_AUDIT_ZONE (America/Lima in the original
+    # deployment) before the first Flyway run — see the README "Security
+    # Checklist for Production".
+    placeholders:
+      legacyAuditZone: ${LEGACY_AUDIT_ZONE:UTC}
+
+    # Adopt existing phase-7 schemas without throwing on first run. Only
+    # enable during the one-shot cutover of a pre-Flyway installation; leave
+    # false on every other deployment.
+    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:false}
+
+    # Out-of-order migrations are rejected by default; honour that.
+    out-of-order: false
+
+    # Allow the same migration to be applied to multiple databases in
+    # parallel CI jobs without cross-talk.
+    lock-retry-count: 50

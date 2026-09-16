@@ -49,6 +49,7 @@ class DeviceContextFacadeImplTelemetryTest {
         assertThat(targets.get(0).deviceId()).isEqualTo(deviceId);
         assertThat(targets.get(0).hardwareId()).isEqualTo("HW-0001");
         assertThat(targets.get(0).assigned()).isTrue();
+        assertThat(targets.get(0).status()).isEqualTo("OFFLINE");
     }
 
     @Test

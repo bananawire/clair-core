@@ -10,61 +10,93 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Pure-domain generator that turns a seeded scenario into a list of {@link EnvironmentalTelemetry}
- * readings. Pure logic, no Spring, no IO — what the bounded context hashes for tests.
+ * Realistic indoor air-quality simulator. Each metric (PM2.5, CO₂, temperature, humidity)
+ * follows an AR(1) process with a sinusoidal seasonal mean and occasional exogenous shocks:
  *
- * <p>Threshold bands (Peru, indoor air quality reference):
+ * <pre>
+ *   X_t   = μ_t + φ·(X_{t−1} − μ_{t−1}) + β·E_t + ε_t,    ε_t ∼ N(0, σ²)
+ *   μ_t   = B + A·sin(2π·t/T + θ + φ_offset)
+ * </pre>
+ *
+ * <p><b>Why the AR(1) form kills the "jump" problem.</b> The standard random-walk generator
+ * drew each reading uniformly inside a band, so a single cycle could jump from PM2.5 = 8
+ * (RECOMMENDED) to PM2.5 = 600 (HIGH). Here, the {@code φ·(X_{t−1} − μ_{t−1})} term keeps
+ * the trajectory close to the previous reading: when {@code X_{t−1} ≈ μ_{t−1}} the next
+ * step is just {@code μ_t + β·E_t + ε}, and {@code φ < 1} forces any spike (cooking,
+ * occupancy) to decay back to the seasonal mean over a handful of cycles.
+ *
+ * <p><b>What each knob does.</b>
  * <ul>
- *   <li>{@link EnvironmentalSeverity#RECOMMENDED} — PM2.5 ∈ [0,25], CO₂ ∈ [400,800],
- *       temperature ∈ [22,26], humidity ∈ [40,60]</li>
- *   <li>{@link EnvironmentalSeverity#ALERT}       — PM2.5 ∈ (25,50], CO₂ ∈ (800,1000],
- *       temperature ∈ [18,22)∪(26,28], humidity ∈ [35,40)∪(60,65]</li>
- *   <li>{@link EnvironmentalSeverity#HIGH}        — PM2.5 ∈ (50,1000], CO₂ ∈ (1000,5000],
- *       temperature ∈ [-10,18)∪(28,60], humidity ∈ [0,35)∪(65,100]</li>
+ *   <li>{@code B, A, T, θ}: the seasonal mean. Defaults give a 1-hour period (T = 240 cycles
+ *       at the 15 s cadence), so a demo run sees the full swing in roughly an hour.</li>
+ *   <li>{@code φ}: persistence ∈ (0, 1). 0.85 for PM2.5, 0.92 for CO₂, 0.96 for temperature
+ *       — temperature is the most sluggish of the four.</li>
+ *   <li>{@code σ}: Gaussian noise std. 1 µg/m³ PM2.5, 18 ppm CO₂, 0.05 °C, 0.4 % humidity.</li>
+ *   <li>{@code E_t, β}: external shocks. Bernoulli({@code eventProb}) fires cooking
+ *       (PM2.5) or occupancy (CO₂) bumps that decay naturally through the AR term.</li>
  * </ul>
  *
- * <p>Determinism: with {@code seed != 0} the generator uses a {@link java.util.Random}; with
- * {@code seed == 0} it falls back to a fresh {@link SecureRandom} on every call so successive
- * cycles runs are not predictable. PM1.0 is sampled strictly below PM2.5; PM10 strictly above;
- * band transitions flip between adjacent gauges to keep indoor plausible.
+ * <p><b>Determinism.</b> With {@code seed != 0} the shared {@link java.util.Random} is fixed
+ * and two fresh policies with the same seed produce identical first-call readings for the
+ * same {@code deviceId} and {@code scenario}. With {@code seed == 0} the generator uses a
+ * fresh {@link SecureRandom} on every cycle, so successive calls are not predictable.
+ *
+ * <p><b>Statefulness.</b> The policy is a Spring singleton bean; the
+ * {@code Map<UUID, DeviceState>} is what makes consecutive cycles evolve smoothly instead
+ * of redrawing from scratch each cycle. Switching scenarios reseeds the state at the new
+ * scenario's seasonal mean so a hot toggle doesn't leave the device oscillating around the
+ * old mean forever.
  */
 public class SyntheticTelemetryGeneratorPolicy {
 
-    /** Indoor product accepts PM2.5 up to 1000 µg/m³ without overflow off the band table. */
-    private static final double PM_HIGH_CEILING = 1000.0;
-    private static final double CO2_HIGH_CEILING = 5000.0;
-    /** Fixed labels — the LocalEdge is a closed simulator; do not let them drift. */
     static final String DEFAULT_NETWORK_NAME = "LOCAL-SIMULATOR";
     static final String DEFAULT_COUNTRY = "Peru";
     static final String DEFAULT_CONNECTIVITY_STATUS = "ONLINE";
-    /** Synthetic healthy signal: 100 means "operating normally" in the receive-side model. */
+
     private static final int HEALTH_RECOMMENDED = 95;
     private static final int HEALTH_ALERT = 70;
     private static final int HEALTH_HIGH = 40;
 
+    private static final double TWO_PI = 2.0 * Math.PI;
+    private static final UUID LEGACY_DEVICE_ID = new UUID(0L, 0L);
+
+    private enum Metric { PM25, CO2, TEMP, HUMIDITY }
+
+    /**
+     * AR(1) parameters for one (scenario, metric) cell. Values come from
+     * {@link #params(SimulationScenario, Metric)}; held in a record so the AR step has a
+     * single typed bundle to read from.
+     */
+    private record MetricParams(
+            double base,          // B   — seasonal mean center
+            double amplitude,     // A   — half-range of the seasonal swing
+            double period,        // T   — cycles per full sine period
+            double phase,         // θ   — scenario phase offset (radians)
+            double phi,           // φ   — AR(1) persistence, 0 < φ < 1
+            double sigma,         // σ   — Gaussian noise std
+            double eventProb,     // P(E_t = 1) per cycle
+            double eventMagnitude // β   — magnitude of the event shock
+    ) {}
+
     private final java.util.Random random;
+    private final Map<UUID, DeviceState> stateByDevice = new ConcurrentHashMap<>();
 
     public SyntheticTelemetryGeneratorPolicy(long seed) {
         this.random = seed == 0L ? new SecureRandom() : new java.util.Random(seed);
     }
 
-    /** Hidden constructor used by tests to inject a deterministic Random. */
+    /** Hidden constructor used by tests to inject a deterministic {@link java.util.Random}. */
     SyntheticTelemetryGeneratorPolicy(java.util.Random random) {
         this.random = random;
     }
 
-    /**
-     * Generates a list of {@code count} readings, one per device id, at the given instant.
-     * {@code count} and {@code deviceIds.size()} must agree.
-     */
     public List<EnvironmentalTelemetry> generate(
-            List<UUID> deviceIds,
-            SimulationScenario scenario,
-            Instant now) {
+            List<UUID> deviceIds, SimulationScenario scenario, Instant now) {
         if (now == null) {
             throw new IllegalArgumentException("now must not be null");
         }
@@ -76,34 +108,61 @@ public class SyntheticTelemetryGeneratorPolicy {
         }
         List<EnvironmentalTelemetry> readings = new ArrayList<>(deviceIds.size());
         for (UUID deviceId : deviceIds) {
-            readings.add(generateOne(scenario, now));
+            readings.add(generateOne(deviceId, scenario, now));
         }
         return List.copyOf(readings);
     }
 
-    /** Single-device convenience used directly by tests. */
+    /**
+     * Backward-compatible single-device entry point for callers that do not have an inventory id.
+     * New LocalEdge flows should use the device-aware overload so state is isolated per device.
+     */
     public EnvironmentalTelemetry generateOne(SimulationScenario scenario, Instant now) {
-        EnvironmentalSeverity severity = pickSeverity(scenario);
-        double pm25 = pickPm25(severity);
-        double co2 = pickCo2(severity);
-        double temperature = pickTemperature(severity);
-        double humidity = pickHumidity(severity);
-        double pm1 = pm25 * (0.40 + 0.15 * random.nextDouble()); // strictly below pm25
-        double pm10 = pm25 * (1.20 + 0.30 * random.nextDouble()); // strictly above pm25
+        return generateOne(LEGACY_DEVICE_ID, scenario, now);
+    }
+
+    public EnvironmentalTelemetry generateOne(UUID deviceId, SimulationScenario scenario, Instant now) {
+        if (deviceId == null) {
+            throw new IllegalArgumentException("deviceId must not be null");
+        }
+        if (scenario == null) {
+            throw new IllegalArgumentException("scenario must not be null");
+        }
+        if (now == null) {
+            throw new IllegalArgumentException("now must not be null");
+        }
+
+        DeviceState state = stateByDevice.computeIfAbsent(deviceId, id -> initialState(id, scenario));
+        if (state.lastScenario != scenario) {
+            reseedState(state, deviceId, scenario);
+        }
+
+        long t = state.cycleCount;
+        long tPrev = Math.max(0L, t - 1L);
+        double phaseOffset = phaseOffset(deviceId);
+
+        state.pm25 = arStep(state.pm25, t, tPrev, params(scenario, Metric.PM25), phaseOffset);
+        state.co2 = arStep(state.co2, t, tPrev, params(scenario, Metric.CO2), phaseOffset);
+        state.temperature = arStep(state.temperature, t, tPrev, params(scenario, Metric.TEMP), phaseOffset);
+        state.humidity = arStep(state.humidity, t, tPrev, params(scenario, Metric.HUMIDITY), phaseOffset);
+
+        double pm1 = state.pm25 * (0.40 + 0.15 * random.nextDouble());  // strictly below pm25
+        double pm10 = state.pm25 * (1.20 + 0.30 * random.nextDouble()); // strictly above pm25
+        int dbm = -1 * (40 + random.nextInt(31));                       // -40 to -70 dBm
 
         ConnectivitySnapshot connectivity = new ConnectivitySnapshot(
-                DEFAULT_CONNECTIVITY_STATUS,
-                DEFAULT_NETWORK_NAME,
-                Integer.valueOf(-1 * (40 + random.nextInt(31))), // -40 to -70 dBm
-                now);
+                DEFAULT_CONNECTIVITY_STATUS, DEFAULT_NETWORK_NAME, Integer.valueOf(dbm), now);
         LocationSnapshot location = new LocationSnapshot(DEFAULT_COUNTRY, now);
 
+        state.cycleCount++;
+        state.lastScenario = scenario;
+
         return new EnvironmentalTelemetry(
-                round2(co2),
-                round2(temperature),
-                round2(humidity),
+                round2(state.co2),
+                round2(state.temperature),
+                round2(state.humidity),
                 round2(pm1),
-                round2(pm25),
+                round2(state.pm25),
                 round2(pm10),
                 connectivity.status(),
                 location.country(),
@@ -112,75 +171,105 @@ public class SyntheticTelemetryGeneratorPolicy {
     }
 
     /**
-     * Severity to score on this draw; the scenario weights the three bands and we
-     * pick whichever cumulative bucket the dice falls into.
+     * Single AR(1) step. {@code mu_t} is the seasonal mean at the current cycle,
+     * {@code muPrev} at the previous cycle. When {@code t == 0} both equal the initial
+     * mean and the persistence term collapses, giving the steady-start behaviour the tests
+     * rely on.
      */
-    private EnvironmentalSeverity pickSeverity(SimulationScenario scenario) {
-        double r = random.nextDouble();
-        double recommended = scenario.recommendedShare();
-        double alert = scenario.alertShare() + recommended;
-        if (r < recommended) return EnvironmentalSeverity.RECOMMENDED;
-        if (r < alert) return EnvironmentalSeverity.ALERT;
-        return EnvironmentalSeverity.HIGH;
+    private double arStep(double xPrev, long t, long tPrev, MetricParams p, double phaseOffset) {
+        double muT = seasonalMean(p, t, phaseOffset);
+        double muPrev = seasonalMean(p, tPrev, phaseOffset);
+        double event = (random.nextDouble() < p.eventProb) ? p.eventMagnitude : 0.0;
+        double noise = gaussian(p.sigma);
+        return muT + p.phi * (xPrev - muPrev) + event + noise;
     }
 
-    /** Uniform draw within the matching PM2.5 interval (µg/m³). */
-    private double pickPm25(EnvironmentalSeverity s) {
+    private static double seasonalMean(MetricParams p, long cycle, double phaseOffset) {
+        return p.base + p.amplitude * Math.sin(TWO_PI * cycle / p.period + p.phase + phaseOffset);
+    }
+
+    /**
+     * Per-(scenario, metric) AR(1) parameters. {@code base} sits inside the target indoor
+     * band so the seasonal mean oscillates around healthy, alert, or hazardous values; the
+     * amplitudes are bounded so peak-to-peak swings stay plausible for indoor air quality.
+     */
+    private MetricParams params(SimulationScenario s, Metric m) {
         return switch (s) {
-            case RECOMMENDED -> between(0.0, 25.0);
-            case ALERT       -> between(25.0001, 50.0);
-            case HIGH        -> between(50.0001, PM_HIGH_CEILING);
+            case MIXED -> switch (m) {
+                case PM25 -> new MetricParams(12.0, 6.0, 240.0, 0.0, 0.85, 1.0, 0.015, 25.0);
+                // CO₂ bounds: with φ=0.85 the stationary spread is σ / sqrt(1-φ²) ≈ 2.3σ,
+                // so the seasonal min (B − A = 500) minus 3σ_stationary stays above 400.
+                case CO2  -> new MetricParams(600.0, 100.0, 240.0, 0.0, 0.85, 12.0, 0.025, 250.0);
+                case TEMP -> new MetricParams(23.5, 1.5, 240.0, 0.0, 0.96, 0.05, 0.0, 0.0);
+                case HUMIDITY -> new MetricParams(50.0, 8.0, 240.0, 0.0, 0.90, 0.4, 0.0, 0.0);
+            };
+            case RECOMMENDED_ONLY -> switch (m) {
+                case PM25 -> new MetricParams(8.0, 3.0, 240.0, 0.0, 0.90, 0.7, 0.0, 0.0);
+                case CO2  -> new MetricParams(550.0, 100.0, 240.0, 0.0, 0.94, 12.0, 0.0, 0.0);
+                case TEMP -> new MetricParams(23.5, 1.0, 240.0, 0.0, 0.97, 0.04, 0.0, 0.0);
+                case HUMIDITY -> new MetricParams(50.0, 5.0, 240.0, 0.0, 0.92, 0.3, 0.0, 0.0);
+            };
+            case ALERT_ONLY -> switch (m) {
+                case PM25 -> new MetricParams(37.5, 6.0, 240.0, 0.0, 0.85, 1.5, 0.04, 30.0);
+                case CO2  -> new MetricParams(900.0, 80.0, 240.0, 0.0, 0.92, 20.0, 0.06, 250.0);
+                case TEMP -> new MetricParams(27.0, 0.5, 240.0, 0.0, 0.96, 0.05, 0.0, 0.0);
+                case HUMIDITY -> new MetricParams(62.0, 1.5, 240.0, 0.0, 0.90, 0.3, 0.0, 0.0);
+            };
+            case HIGH_ONLY -> switch (m) {
+                case PM25 -> new MetricParams(200.0, 100.0, 240.0, 0.0, 0.85, 10.0, 0.10, 150.0);
+                case CO2  -> new MetricParams(2000.0, 500.0, 240.0, 0.0, 0.92, 50.0, 0.08, 500.0);
+                case TEMP -> new MetricParams(32.0, 2.0, 240.0, 0.0, 0.96, 0.1, 0.0, 0.0);
+                case HUMIDITY -> new MetricParams(80.0, 8.0, 240.0, 0.0, 0.90, 0.5, 0.0, 0.0);
+            };
+            case STRESS_TEST -> switch (m) {
+                case PM25 -> new MetricParams(150.0, 80.0, 240.0, 0.0, 0.80, 12.0, 0.20, 200.0);
+                case CO2  -> new MetricParams(1800.0, 400.0, 240.0, 0.0, 0.88, 60.0, 0.20, 600.0);
+                case TEMP -> new MetricParams(30.0, 3.0, 240.0, 0.0, 0.94, 0.2, 0.0, 0.0);
+                case HUMIDITY -> new MetricParams(78.0, 10.0, 240.0, 0.0, 0.88, 0.6, 0.0, 0.0);
+            };
         };
     }
 
-    /** Uniform draw within the matching CO₂ interval (ppm). */
-    private double pickCo2(EnvironmentalSeverity s) {
-        return switch (s) {
-            case RECOMMENDED -> between(400.0, 800.0);
-            case ALERT       -> between(800.0001, 1000.0);
-            case HIGH        -> between(1000.0001, CO2_HIGH_CEILING);
-        };
+    private DeviceState initialState(UUID deviceId, SimulationScenario scenario) {
+        double phaseOffset = phaseOffset(deviceId);
+        DeviceState s = new DeviceState(scenario, 0L);
+        for (Metric metric : Metric.values()) {
+            MetricParams p = params(scenario, metric);
+            double v = seasonalMean(p, 0L, phaseOffset);
+            switch (metric) {
+                case PM25 -> s.pm25 = v;
+                case CO2 -> s.co2 = v;
+                case TEMP -> s.temperature = v;
+                case HUMIDITY -> s.humidity = v;
+            }
+        }
+        return s;
     }
 
-    /** Uniform draw within the matching temperature interval (Celsius). */
-    private double pickTemperature(EnvironmentalSeverity s) {
-        return switch (s) {
-            case RECOMMENDED -> between(22.0, 26.0);
-            case ALERT       -> {
-                // [18,22) ∪ (26,28]; pick which side by the dice to keep distribution uniform.
-                yield random.nextBoolean()
-                        ? between(18.0, 21.9999)
-                        : between(26.0001, 28.0);
-            }
-            case HIGH        -> {
-                // [-10,18) ∪ (28,60]
-                yield random.nextBoolean()
-                        ? between(-10.0, 17.9999)
-                        : between(28.0001, 60.0);
-            }
-        };
+    private void reseedState(DeviceState state, UUID deviceId, SimulationScenario scenario) {
+        DeviceState fresh = initialState(deviceId, scenario);
+        state.pm25 = fresh.pm25;
+        state.co2 = fresh.co2;
+        state.temperature = fresh.temperature;
+        state.humidity = fresh.humidity;
+        state.lastScenario = scenario;
+        // Keep cycleCount so the seasonal phase continues across the toggle; the AR term
+        // will move the values toward the new scenario's mean within a handful of cycles.
     }
 
-    /** Uniform draw within the matching humidity interval (%). */
-    private double pickHumidity(EnvironmentalSeverity s) {
-        return switch (s) {
-            case RECOMMENDED -> between(40.0, 60.0);
-            case ALERT       -> {
-                // [35,40) ∪ (60,65]
-                yield random.nextBoolean()
-                        ? between(35.0, 39.9999)
-                        : between(60.0001, 65.0);
-            }
-            case HIGH        -> {
-                // [0,35) ∪ (65,100]
-                yield random.nextBoolean()
-                        ? between(0.0, 34.9999)
-                        : between(65.0001, 100.0);
-            }
-        };
+    /** Per-device phase offset (0 to 2π) so devices don't all rise and fall in lock-step. */
+    private double phaseOffset(UUID deviceId) {
+        long h = deviceId.getLeastSignificantBits() ^ deviceId.getMostSignificantBits();
+        return (h & 0xFFFFL) / 65535.0 * TWO_PI;
     }
 
-    /** Health gauge the evaluation BC will read alongside the metrics: HIGH < ALERT < RECOMMENDED. */
+    /** Box–Muller; consumes two uniform draws. {@code Math.max} guards the log() against u1=0. */
+    private double gaussian(double sigma) {
+        double u1 = Math.max(random.nextDouble(), 1e-12);
+        double u2 = random.nextDouble();
+        return sigma * Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(TWO_PI * u2);
+    }
+
     public static int healthFor(EnvironmentalSeverity severity) {
         return switch (severity) {
             case RECOMMENDED -> HEALTH_RECOMMENDED;
@@ -189,39 +278,43 @@ public class SyntheticTelemetryGeneratorPolicy {
         };
     }
 
-    private double between(double lo, double hi) {
-        if (hi <= lo) {
-            throw new IllegalStateException("invalid range [" + lo + ", " + hi + "]");
-        }
-        return lo + random.nextDouble() * (hi - lo);
+    private static double round2(double v) {
+        return Math.round(v * 100.0) / 100.0;
     }
 
-    private static double round2(double value) {
-        return Math.round(value * 100.0) / 100.0;
-    }
-
-    /** Locale-stable factory for logs. */
     public static String formatCountry() {
+        return DEFAULT_COUNTRY;
+    }
+
+    public String networkName() {
+        return DEFAULT_NETWORK_NAME;
+    }
+
+    public static String countryString() {
         return DEFAULT_COUNTRY;
     }
 
     @Override
     public String toString() {
-        return "SyntheticTelemetryGeneratorPolicy{random=" + random.getClass().getSimpleName() + "}";
+        return "SyntheticTelemetryGeneratorPolicy{random=" + random.getClass().getSimpleName()
+                + ", tracked=" + stateByDevice.size() + "}";
     }
 
-    /** Internal helper used by tests that want to drive the random directly. */
     java.util.Random randomForTests() {
         return random;
     }
 
-    /** Returns the network name in use; exposed for diagnostic messages. */
-    public String networkName() {
-        return DEFAULT_NETWORK_NAME;
-    }
+    private static final class DeviceState {
+        double pm25;
+        double co2;
+        double temperature;
+        double humidity;
+        SimulationScenario lastScenario;
+        long cycleCount;
 
-    /** Stable string used by tests to assert against {@link Locale}. */
-    public static String countryString() {
-        return DEFAULT_COUNTRY;
+        DeviceState(SimulationScenario scenario, long cycleCount) {
+            this.lastScenario = scenario;
+            this.cycleCount = cycleCount;
+        }
     }
 }

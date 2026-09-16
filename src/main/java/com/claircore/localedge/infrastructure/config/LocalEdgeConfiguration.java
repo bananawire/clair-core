@@ -3,7 +3,10 @@ package com.claircore.localedge.infrastructure.config;
 import com.claircore.localedge.application.internal.commandservices.LocalEdgeTelemetryCommandService;
 import com.claircore.localedge.application.internal.commandservices.LocalEdgeTelemetryCommandServiceImpl;
 import com.claircore.localedge.domain.services.SyntheticTelemetryGeneratorPolicy;
+import com.claircore.localedge.application.LocalDeviceCommandExecutor;
+import com.claircore.localedge.infrastructure.simulation.SimulatedLocalDeviceCommandExecutor;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -29,11 +32,21 @@ public class LocalEdgeConfiguration {
         return new SyntheticTelemetryGeneratorPolicy(seed);
     }
 
+    /**
+     * The simulator is the safe default for this in-process deployment. A physical adapter can
+     * replace it simply by providing another {@link LocalDeviceCommandExecutor} bean.
+     */
+    @Bean
+    @ConditionalOnMissingBean(LocalDeviceCommandExecutor.class)
+    public LocalDeviceCommandExecutor localDeviceCommandExecutor() {
+        return new SimulatedLocalDeviceCommandExecutor();
+    }
+
     @Bean
     public LocalEdgeTelemetryCommandService localEdgeTelemetryCommandService(
             com.claircore.localedge.application.internal.outboundservices.acl.ExternalDeviceService externalDeviceService,
             com.claircore.localedge.application.internal.outboundservices.acl.ExternalEvaluationService externalEvaluationService,
-            SyntheticTelemetryGeneratorPolicy generator) {
-        return new LocalEdgeTelemetryCommandServiceImpl(externalDeviceService, externalEvaluationService, generator);
+            SyntheticTelemetryGeneratorPolicy generator, LocalDeviceCommandExecutor commandExecutor) {
+        return new LocalEdgeTelemetryCommandServiceImpl(externalDeviceService, externalEvaluationService, generator, commandExecutor);
     }
 }

@@ -35,8 +35,9 @@ public interface DeviceCommandPersistenceRepository extends JpaRepository<Device
      * parameter $N". Comparing against the column itself when {@code :since} is null keeps the
      * original "no filter" semantics. The edge never sends since, so this runs on every poll.
      *
-     * <p>The device is no longer joined: the caller reads {@code deviceId} off the command and
-     * resolves hardware ids in one batch, so nothing here depends on an association being fetched.
+     * <p>The command does not carry a JPA device association: the caller reads {@code deviceId}
+     * off the command and resolves any hardware data separately. The existence predicates below
+     * only validate that the device is live and that a bound assignment belongs to that device.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
@@ -45,7 +46,11 @@ public interface DeviceCommandPersistenceRepository extends JpaRepository<Device
                         AND c.createdAt >= COALESCE(:since, c.createdAt))
                    OR (c.status = com.claircore.device.domain.model.valueobjects.DeviceCommandStatus.SENT
                         AND c.sentAt <= :leaseCutoff))
-              AND (c.assignmentId IS NULL OR EXISTS (SELECT a.id FROM DeviceAssignmentPersistenceEntity a WHERE a.id = c.assignmentId))
+              AND EXISTS (SELECT d.id FROM DevicePersistenceEntity d
+                           WHERE d.id = c.deviceId AND (d.deleted = false OR d.deleted IS NULL))
+              AND (c.assignmentId IS NULL OR EXISTS (SELECT a.id FROM DeviceAssignmentPersistenceEntity a
+                                                       WHERE a.id = c.assignmentId
+                                                         AND a.deviceId = c.deviceId))
             ORDER BY COALESCE(c.sentAt, c.createdAt) ASC
             """)
     List<DeviceCommandPersistenceEntity> findPendingForEdge(
@@ -60,14 +65,18 @@ public interface DeviceCommandPersistenceRepository extends JpaRepository<Device
                         AND c.createdAt >= COALESCE(:since, c.createdAt))
                    OR (c.status = com.claircore.device.domain.model.valueobjects.DeviceCommandStatus.SENT
                         AND c.sentAt <= :leaseCutoff))
-              AND (c.assignmentId IS NULL OR EXISTS (SELECT a.id FROM DeviceAssignmentPersistenceEntity a WHERE a.id = c.assignmentId))
+              AND EXISTS (SELECT d.id FROM DevicePersistenceEntity d
+                           WHERE d.id = c.deviceId AND (d.deleted = false OR d.deleted IS NULL))
+              AND (c.assignmentId IS NULL OR EXISTS (SELECT a.id FROM DeviceAssignmentPersistenceEntity a
+                                                       WHERE a.id = c.assignmentId
+                                                         AND a.deviceId = c.deviceId))
             ORDER BY COALESCE(c.sentAt, c.createdAt) ASC
             """)
     List<DeviceCommandPersistenceEntity> findPendingForEdgeByDevice(
             @Param("deviceId") UUID deviceId, @Param("since") Instant since,
             @Param("leaseCutoff") Instant leaseCutoff, Pageable pageable);
 
-    @Modifying
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""
             UPDATE DeviceCommandPersistenceEntity c
             SET c.status = com.claircore.device.domain.model.valueobjects.DeviceCommandStatus.SENT,
@@ -76,6 +85,11 @@ public interface DeviceCommandPersistenceRepository extends JpaRepository<Device
               AND (c.status = com.claircore.device.domain.model.valueobjects.DeviceCommandStatus.PENDING
                    OR (c.status = com.claircore.device.domain.model.valueobjects.DeviceCommandStatus.SENT
                        AND c.sentAt <= :leaseCutoff))
+              AND EXISTS (SELECT d.id FROM DevicePersistenceEntity d
+                           WHERE d.id = c.deviceId AND (d.deleted = false OR d.deleted IS NULL))
+              AND (c.assignmentId IS NULL OR EXISTS (SELECT a.id FROM DeviceAssignmentPersistenceEntity a
+                                                       WHERE a.id = c.assignmentId
+                                                         AND a.deviceId = c.deviceId))
             """)
     int claimForEdge(@Param("commandId") UUID commandId, @Param("leaseCutoff") Instant leaseCutoff,
                      @Param("claimedAt") Instant claimedAt);

@@ -35,9 +35,11 @@ public interface DeviceCommandRepository {
             String hardwareId, Instant since, Instant leaseCutoff, int limit);
 
     /**
-     * Moves a command to SENT only if it is still claimable, in one statement.
+     * Moves a command to SENT only if it is still claimable and its bound assignment still belongs
+     * to the command's device, in one statement.
      *
-     * @return 1 when this caller won the claim, 0 when another already had it.
+     * @return 1 when this caller won the claim, 0 when another already had it or the binding is
+     * invalid.
      */
     int claimForEdge(UUID commandId, Instant leaseCutoff, Instant claimedAt);
     /**

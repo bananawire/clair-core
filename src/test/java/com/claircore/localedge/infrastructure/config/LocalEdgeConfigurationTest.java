@@ -17,6 +17,10 @@ class LocalEdgeConfigurationTest {
             .withConfiguration(AutoConfigurations.of(LocalEdgeConfiguration.class))
             .withUserConfiguration(Stubs.class);
 
+    private final ApplicationContextRunner simulatorRunner = new ApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(LocalEdgeConfiguration.class))
+            .withUserConfiguration(ExternalOnlyStubs.class);
+
     @Test
     void wiringProducesTheGeneratorAndTheCommandServiceWhenEnabled() {
         runner.withPropertyValues(
@@ -26,6 +30,15 @@ class LocalEdgeConfigurationTest {
                     assertThat(context).hasSingleBean(SyntheticTelemetryGeneratorPolicy.class);
                     assertThat(context).hasSingleBean(LocalEdgeTelemetryCommandService.class);
                 });
+    }
+
+    @Test
+    void suppliesTheSimulatorWhenNoPhysicalExecutorIsConfigured() {
+        simulatorRunner.withPropertyValues("claircore.local-edge.enabled=true").run(context -> {
+            assertThat(context).hasSingleBean(
+                    com.claircore.localedge.infrastructure.simulation.SimulatedLocalDeviceCommandExecutor.class);
+            assertThat(context).hasSingleBean(com.claircore.localedge.application.LocalDeviceCommandExecutor.class);
+        });
     }
 
     @Test
@@ -44,6 +57,21 @@ class LocalEdgeConfigurationTest {
     }
 
     @Configuration
+    static class ExternalOnlyStubs {
+        @Bean
+        com.claircore.localedge.application.internal.outboundservices.acl.ExternalDeviceService externalDeviceService() {
+            return org.mockito.Mockito.mock(
+                    com.claircore.localedge.application.internal.outboundservices.acl.ExternalDeviceService.class);
+        }
+
+        @Bean
+        com.claircore.localedge.application.internal.outboundservices.acl.ExternalEvaluationService externalEvaluationService() {
+            return org.mockito.Mockito.mock(
+                    com.claircore.localedge.application.internal.outboundservices.acl.ExternalEvaluationService.class);
+        }
+    }
+
+    @Configuration
     static class Stubs {
         @Bean
         com.claircore.localedge.application.internal.outboundservices.acl.ExternalDeviceService externalDeviceService() {
@@ -55,6 +83,11 @@ class LocalEdgeConfigurationTest {
         com.claircore.localedge.application.internal.outboundservices.acl.ExternalEvaluationService externalEvaluationService() {
             return org.mockito.Mockito.mock(
                     com.claircore.localedge.application.internal.outboundservices.acl.ExternalEvaluationService.class);
+        }
+
+        @Bean
+        com.claircore.localedge.application.LocalDeviceCommandExecutor localDeviceCommandExecutor() {
+            return command -> { };
         }
     }
 }

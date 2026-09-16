@@ -14,6 +14,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -21,6 +22,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -104,6 +106,75 @@ class DeviceControlCommandServiceImplTest {
     }
 
     @Test
+    void shouldClaimPendingCommandAndReturnTheSentCommand() {
+        DeviceAssignment assignment = ownedAssignment();
+        DeviceCommand command = new DeviceCommand(
+                assignment.getDeviceId(), assignment.getId(), DeviceCommandType.WAKE, "{}");
+        UUID commandId = UUID.randomUUID();
+        org.springframework.test.util.ReflectionTestUtils.setField(command, "id", commandId);
+        command.markSent();
+        Instant cutoff = Instant.parse("2026-05-16T22:29:00Z");
+        Instant claimedAt = Instant.parse("2026-05-16T22:30:00Z");
+        when(deviceCommandRepository.claimForEdge(commandId, cutoff, claimedAt)).thenReturn(1);
+        when(deviceCommandRepository.findById(commandId)).thenReturn(Optional.of(command));
+
+        Optional<DeviceCommand> result = service().claimForEdge(commandId, cutoff, claimedAt);
+
+        assertEquals(Optional.of(command), result);
+        assertEquals(DeviceCommandStatus.SENT, result.orElseThrow().getStatus());
+        verify(deviceCommandRepository).claimForEdge(commandId, cutoff, claimedAt);
+        verify(deviceCommandRepository).findById(commandId);
+    }
+
+    @Test
+    void shouldNotReadOrExecuteACommandWhenClaimWasLostToAnotherConsumer() {
+        UUID commandId = UUID.randomUUID();
+        Instant cutoff = Instant.parse("2026-05-16T22:29:00Z");
+        Instant claimedAt = Instant.parse("2026-05-16T22:30:00Z");
+        when(deviceCommandRepository.claimForEdge(commandId, cutoff, claimedAt)).thenReturn(0);
+
+        Optional<DeviceCommand> result = service().claimForEdge(commandId, cutoff, claimedAt);
+
+        assertEquals(Optional.empty(), result);
+        verify(deviceCommandRepository, never()).findById(commandId);
+    }
+
+    @Test
+    void shouldLeaveAAlreadyTerminalAckIdempotent() {
+        DeviceAssignment assignment = ownedAssignment();
+        DeviceCommand command = new DeviceCommand(
+                assignment.getDeviceId(), assignment.getId(), DeviceCommandType.WAKE, "{}");
+        UUID commandId = UUID.randomUUID();
+        org.springframework.test.util.ReflectionTestUtils.setField(command, "id", commandId);
+        command.markExecuted();
+        when(deviceCommandRepository.findByIdForAcknowledgement(commandId)).thenReturn(Optional.of(command));
+
+        DeviceCommand result = service().handle(new AcknowledgeDeviceCommandCommand(
+                assignment.getDeviceId(), commandId, DeviceCommandStatus.FAILED, "late failure"));
+
+        assertEquals(DeviceCommandStatus.EXECUTED, result.getStatus());
+        verify(deviceAssignmentRepository, never()).findByDeviceIdForUpdate(any());
+        verify(deviceCommandRepository, never()).save(any(DeviceCommand.class));
+    }
+
+    @Test
+    void shouldRejectAnAckForAnotherDevice() {
+        DeviceAssignment assignment = ownedAssignment();
+        DeviceCommand command = new DeviceCommand(
+                assignment.getDeviceId(), assignment.getId(), DeviceCommandType.WAKE, "{}");
+        UUID commandId = UUID.randomUUID();
+        org.springframework.test.util.ReflectionTestUtils.setField(command, "id", commandId);
+        when(deviceCommandRepository.findByIdForAcknowledgement(commandId)).thenReturn(Optional.of(command));
+
+        assertThrowsExactly(IllegalArgumentException.class, () -> service().handle(
+                new AcknowledgeDeviceCommandCommand(
+                        UUID.randomUUID(), commandId, DeviceCommandStatus.EXECUTED, null)));
+
+        verify(deviceAssignmentRepository, never()).findByDeviceIdForUpdate(any());
+        verify(deviceCommandRepository, never()).save(any(DeviceCommand.class));
+    }
+
+    @Test
     void shouldMarkCommandAsExecutedWhenAcknowledgedSuccessfully() {
         DeviceAssignment assignment = ownedAssignment();
         DeviceCommand command = new DeviceCommand(assignment.getDeviceId(), DeviceCommandType.WAKE, "{}");
@@ -116,6 +187,28 @@ class DeviceControlCommandServiceImplTest {
 
         assertEquals(DeviceCommandStatus.EXECUTED, result.getStatus());
         verify(deviceAssignmentRepository).save(assignment);
+    }
+
+    @Test
+    void shouldMarkCommandAsFailedWhenEdgeReportsExecutionFailure() {
+        DeviceAssignment assignment = ownedAssignment();
+        DeviceCommand command = new DeviceCommand(
+                assignment.getDeviceId(), assignment.getId(), DeviceCommandType.RESTART, "{}");
+        UUID commandId = UUID.randomUUID();
+        org.springframework.test.util.ReflectionTestUtils.setField(command, "id", commandId);
+        when(deviceCommandRepository.findByIdForAcknowledgement(commandId)).thenReturn(Optional.of(command));
+        when(deviceAssignmentRepository.findByDeviceIdForUpdate(assignment.getDeviceId()))
+                .thenReturn(Optional.of(assignment));
+        when(deviceCommandRepository.save(any(DeviceCommand.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        DeviceCommand result = service().handle(new AcknowledgeDeviceCommandCommand(
+                assignment.getDeviceId(), commandId, DeviceCommandStatus.FAILED, "actuator unavailable"));
+
+        assertEquals(DeviceCommandStatus.FAILED, result.getStatus());
+        assertEquals("actuator unavailable", result.getFailureReason());
+        verify(deviceAssignmentRepository, never()).save(any(DeviceAssignment.class));
+        verify(deviceCommandRepository).save(command);
     }
 
     @Test

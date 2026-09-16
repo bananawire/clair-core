@@ -132,6 +132,19 @@ class DeviceCommandRepositoryImplTest {
     }
 
     @Test
+    void anExpiredSentCommandCanBeClaimedAgainAfterItsLease() {
+        var device = saveDevice("SN-7B", "HW-0007");
+        var command = commands.save(new DeviceCommand(device.getId(), DeviceCommandType.WAKE, "{}"));
+        Instant firstClaim = Instant.parse("2026-05-16T22:30:00Z");
+
+        assertThat(commands.claimForEdge(command.getId(), firstClaim.minusSeconds(1), firstClaim)).isEqualTo(1);
+        assertThat(commands.claimForEdge(
+                command.getId(), firstClaim.plusSeconds(60), firstClaim.plusSeconds(61))).isEqualTo(1);
+        assertThat(commands.findById(command.getId())).get()
+                .extracting(DeviceCommand::getStatus).isEqualTo(DeviceCommandStatus.SENT);
+    }
+
+    @Test
     void latestByDeviceIdIsTheMostRecentlyCreatedCommand() {
         var device = saveDevice("SN-8", "HW-0008");
         commands.save(new DeviceCommand(device.getId(), DeviceCommandType.WAKE, "{}"));
@@ -153,6 +166,22 @@ class DeviceCommandRepositoryImplTest {
         assertThat(commands.findPendingForEdge(null, Instant.now(), 10)).extracting(DeviceCommand::getId)
                 .doesNotContain(bound.getId());
         assertThat(commands.findPendingForEdgeByHardware("HW-0009", null, Instant.now(), 10)).isEmpty();
+    }
+
+    @Test
+    void aCommandCannotBeClaimedWhenItsAssignmentBelongsToAnotherDevice() {
+        var assignmentDevice = saveDevice("SN-9A", "HW-0009");
+        var commandDevice = saveDevice("SN-9B", "HW-0011");
+        var assignment = assignments.save(new com.claircore.device.domain.model.aggregates.DeviceAssignment(
+                assignmentDevice.getId(), com.claircore.device.domain.model.valueobjects.ClaimToken.generate()));
+        var mismatched = commands.save(new DeviceCommand(
+                commandDevice.getId(), assignment.getId(), DeviceCommandType.WAKE, "{}"));
+
+        assertThat(commands.findPendingForEdge(null, Instant.now(), 10))
+                .extracting(DeviceCommand::getId).doesNotContain(mismatched.getId());
+        assertThat(commands.findPendingForEdgeByHardware(
+                "HW-0011", null, Instant.now(), 10)).isEmpty();
+        assertThat(commands.claimForEdge(mismatched.getId(), Instant.now(), Instant.now())).isZero();
     }
 
     @Test

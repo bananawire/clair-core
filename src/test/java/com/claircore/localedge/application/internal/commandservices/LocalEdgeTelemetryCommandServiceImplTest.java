@@ -3,7 +3,10 @@ package com.claircore.localedge.application.internal.commandservices;
 import com.claircore.device.interfaces.acl.DeviceTelemetryTarget;
 import com.claircore.evaluation.interfaces.acl.TelemetryRecordingResult;
 import com.claircore.evaluation.interfaces.acl.TelemetrySubmission;
+import com.claircore.device.interfaces.acl.DeviceCommandForEdge;
+import com.claircore.localedge.application.LocalDeviceCommandExecutor;
 import com.claircore.localedge.application.internal.outboundservices.acl.ExternalDeviceService;
+import com.claircore.localedge.infrastructure.simulation.SimulatedLocalDeviceCommandExecutor;
 import com.claircore.localedge.application.internal.outboundservices.acl.ExternalEvaluationService;
 import com.claircore.localedge.domain.model.commands.GenerateSyntheticTelemetryCommand;
 import com.claircore.localedge.domain.model.valueobjects.SimulationScenario;
@@ -38,13 +41,15 @@ class LocalEdgeTelemetryCommandServiceImplTest {
 
     @Mock ExternalDeviceService externalDeviceService;
     @Mock ExternalEvaluationService externalEvaluationService;
+    @Mock LocalDeviceCommandExecutor commandExecutor;
     private SyntheticTelemetryGeneratorPolicy policy;
     private LocalEdgeTelemetryCommandServiceImpl service;
 
     @BeforeEach
     void setUp() {
         policy = new SyntheticTelemetryGeneratorPolicy(42L);
-        service = new LocalEdgeTelemetryCommandServiceImpl(externalDeviceService, externalEvaluationService, policy);
+        service = new LocalEdgeTelemetryCommandServiceImpl(
+                externalDeviceService, externalEvaluationService, policy, commandExecutor);
     }
 
     @Test
@@ -115,6 +120,83 @@ class LocalEdgeTelemetryCommandServiceImplTest {
         assertThat(outcome.accepted()).isZero();
         assertThat(outcome.rejected()).isEqualTo(1);
         verify(externalDeviceService, times(1)).recordPresence(eq(device), eq("ONLINE"), eq(NOW));
+    }
+
+    @Test
+    void standbyTargetDoesNotProduceTelemetryOrPresence() {
+        UUID device = UUID.randomUUID();
+        when(externalDeviceService.findTelemetryTargets(eq(1), anyBoolean()))
+                .thenReturn(List.of(new DeviceTelemetryTarget(device, "HW-0001", "Sensor 1", true, "STANDBY")));
+
+        var command = new GenerateSyntheticTelemetryCommand(List.of(device), SimulationScenario.MIXED, 1L, NOW);
+        LocalEdgeTelemetryCommandServiceImpl.CycleOutcome outcome = service.runCycle(command);
+
+        assertThat(outcome.accepted()).isZero();
+        assertThat(outcome.rejected()).isZero();
+        assertThat(outcome.presenceUpdates()).isZero();
+        verify(externalEvaluationService, never()).recordTelemetry(any());
+        verify(externalDeviceService, never()).recordPresence(any(), anyString(), any());
+    }
+
+    @Test
+    void executorStandbyStateSuppressesTelemetryBeforeAclStatusCatchesUp() {
+        UUID device = UUID.randomUUID();
+        when(externalDeviceService.findTelemetryTargets(eq(1), anyBoolean()))
+                .thenReturn(List.of(new DeviceTelemetryTarget(device, "HW-0001", "Sensor 1", true, "ONLINE")));
+        when(commandExecutor.isStandby(device)).thenReturn(true);
+
+        var command = new GenerateSyntheticTelemetryCommand(List.of(device), SimulationScenario.MIXED, 1L, NOW);
+        LocalEdgeTelemetryCommandServiceImpl.CycleOutcome outcome = service.runCycle(command);
+
+        assertThat(outcome.accepted()).isZero();
+        verify(externalEvaluationService, never()).recordTelemetry(any());
+        verify(externalDeviceService, never()).recordPresence(any(), anyString(), any());
+    }
+
+    @Test
+    void wakeResumesTelemetryAfterStandbySuppressedIt() {
+        UUID device = UUID.randomUUID();
+        when(externalDeviceService.findTelemetryTargets(eq(1), anyBoolean()))
+                .thenReturn(List.of(new DeviceTelemetryTarget(device, "HW-0001", "Sensor 1", true, "ONLINE")));
+        when(externalEvaluationService.recordTelemetry(any()))
+                .thenReturn(TelemetryRecordingResult.accepted(UUID.randomUUID(), NOW));
+
+        SimulatedLocalDeviceCommandExecutor executor = new SimulatedLocalDeviceCommandExecutor();
+        LocalEdgeTelemetryCommandServiceImpl statefulService = new LocalEdgeTelemetryCommandServiceImpl(
+                externalDeviceService, externalEvaluationService,
+                new SyntheticTelemetryGeneratorPolicy(42L), executor);
+        var standby = new DeviceCommandForEdge(UUID.randomUUID(), device, UUID.randomUUID(),
+                "STANDBY", null, NOW);
+        var wake = new DeviceCommandForEdge(UUID.randomUUID(), device, UUID.randomUUID(),
+                "WAKE", null, NOW);
+
+        executor.execute(standby);
+        var standbyOutcome = statefulService.runCycle(new GenerateSyntheticTelemetryCommand(
+                List.of(device), SimulationScenario.MIXED, 42L, NOW));
+        assertThat(standbyOutcome.accepted()).isZero();
+        verify(externalEvaluationService, never()).recordTelemetry(any());
+
+        executor.execute(wake);
+        var wakeOutcome = statefulService.runCycle(new GenerateSyntheticTelemetryCommand(
+                List.of(device), SimulationScenario.MIXED, 42L, NOW.plusSeconds(15)));
+        assertThat(wakeOutcome.accepted()).isEqualTo(1);
+        assertThat(wakeOutcome.presenceUpdates()).isEqualTo(1);
+    }
+
+    @Test
+    void commandDeviceNotReturnedByAclDoesNotReceiveTelemetry() {
+        UUID requested = UUID.randomUUID();
+        UUID surfaced = UUID.randomUUID();
+        when(externalDeviceService.findTelemetryTargets(eq(1), anyBoolean()))
+                .thenReturn(List.of(new DeviceTelemetryTarget(surfaced, "HW-0001", "Sensor 1", true)));
+
+        var command = new GenerateSyntheticTelemetryCommand(
+                List.of(requested), SimulationScenario.MIXED, 1L, NOW);
+        LocalEdgeTelemetryCommandServiceImpl.CycleOutcome outcome = service.runCycle(command);
+
+        assertThat(outcome.accepted()).isZero();
+        assertThat(outcome.rejected()).isZero();
+        verify(externalEvaluationService, never()).recordTelemetry(any());
     }
 
     @Test

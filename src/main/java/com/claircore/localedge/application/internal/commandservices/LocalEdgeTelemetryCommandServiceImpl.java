@@ -10,6 +10,7 @@ import com.claircore.localedge.domain.model.valueobjects.EnvironmentalSeverity;
 import com.claircore.localedge.domain.model.valueobjects.EnvironmentalTelemetry;
 import com.claircore.localedge.domain.model.valueobjects.SimulationScenario;
 import com.claircore.localedge.domain.services.SyntheticTelemetryGeneratorPolicy;
+import com.claircore.localedge.application.LocalDeviceCommandExecutor;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,7 +18,6 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,14 +48,20 @@ public class LocalEdgeTelemetryCommandServiceImpl implements LocalEdgeTelemetryC
     private final ExternalDeviceService externalDeviceService;
     private final ExternalEvaluationService externalEvaluationService;
     private final SyntheticTelemetryGeneratorPolicy generator;
+    private final LocalDeviceCommandExecutor commandExecutor;
 
-    public LocalEdgeTelemetryCommandServiceImpl(
-            ExternalDeviceService externalDeviceService,
-            ExternalEvaluationService externalEvaluationService,
-            SyntheticTelemetryGeneratorPolicy generator) {
+    public LocalEdgeTelemetryCommandServiceImpl(ExternalDeviceService externalDeviceService,
+            ExternalEvaluationService externalEvaluationService, SyntheticTelemetryGeneratorPolicy generator) {
+        this(externalDeviceService, externalEvaluationService, generator, deviceId -> { });
+    }
+
+    public LocalEdgeTelemetryCommandServiceImpl(ExternalDeviceService externalDeviceService,
+            ExternalEvaluationService externalEvaluationService, SyntheticTelemetryGeneratorPolicy generator,
+            LocalDeviceCommandExecutor commandExecutor) {
         this.externalDeviceService = externalDeviceService;
         this.externalEvaluationService = externalEvaluationService;
         this.generator = generator;
+        this.commandExecutor = commandExecutor;
     }
 
     @Override
@@ -77,27 +83,31 @@ public class LocalEdgeTelemetryCommandServiceImpl implements LocalEdgeTelemetryC
             return new CycleOutcome(0, 0, 0);
         }
 
+        Map<UUID, DeviceTelemetryTarget> targetsByDevice = new HashMap<>();
         Map<UUID, Boolean> assignedByDevice = new HashMap<>();
         for (DeviceTelemetryTarget target : targets) {
-            assignedByDevice.put(target.deviceId(), target.assigned());
+            targetsByDevice.putIfAbsent(target.deviceId(), target);
+            assignedByDevice.putIfAbsent(target.deviceId(), target.assigned());
         }
 
-        List<UUID> deviceIds = command.deviceIds();
-        if (deviceIds.size() > targets.size()) {
-            // Trim to the number of targets returned by the device BC so we never reference a
-            // device the BC has not surfaced for this cycle.
-            deviceIds = deviceIds.subList(0, targets.size());
+        // The device ACL is authoritative for the roster and persisted STANDBY status. The
+        // executor state closes the small window before the ACK has been reflected in that ACL.
+        List<UUID> deviceIds = command.deviceIds().stream()
+                .distinct()
+                .filter(targetsByDevice::containsKey)
+                .filter(id -> !targetsByDevice.get(id).isStandby())
+                .filter(id -> !commandExecutor.isStandby(id))
+                .toList();
+        if (deviceIds.isEmpty()) {
+            LOGGER.info("LocalEdge cycle found no active telemetry targets");
+            return new CycleOutcome(0, 0, 0);
         }
 
         Instant now = command.startedAt();
-        List<EnvironmentalTelemetry> readings = new ArrayList<>(deviceIds.size());
-        for (int i = 0; i < deviceIds.size(); i++) {
-            // Reading generation must remain deterministic across cycles reruns at the same seed:
-            // each reading uses a slot of the shared generator seeded with the device index.
-            SyntheticTelemetryGeneratorPolicy oneSlot =
-                    new SyntheticTelemetryGeneratorPolicy(deriveSeed(command.seed(), i));
-            readings.add(oneSlot.generateOne(command.scenario(), now));
-        }
+        // The generator is a singleton bean: it carries per-deviceId state across cycles,
+        // so the AR(1) persistence term sees real X_{t-1} values instead of being reset to
+        // the seasonal mean every dispatch. That is what keeps consecutive readings smooth.
+        List<EnvironmentalTelemetry> readings = generator.generate(deviceIds, command.scenario(), now);
 
         int accepted = 0;
         int rejected = 0;
@@ -138,18 +148,6 @@ public class LocalEdgeTelemetryCommandServiceImpl implements LocalEdgeTelemetryC
         }
 
         return new CycleOutcome(accepted, rejected, presenceUpdates);
-    }
-
-    private static long deriveSeed(long baseSeed, int index) {
-        // Steady hash of (baseSeed, index) so a fixed baseSeed always yields the same per-device
-        // sub-seed; with baseSeed=0 we hand back 0 so the generator keeps its non-deterministic
-        // SecureRandom branch (the device index is irrelevant when the whole sequence is non-deterministic).
-        if (baseSeed == 0L) return 0L;
-        long h = baseSeed ^ ((long) index * 0x9E3779B97F4A7C15L);
-        h ^= (h >>> 30) * 0xBF58476D1CE4E5B9L;
-        h ^= (h >>> 27) * 0x94D049BB133111EBL;
-        h ^= h >>> 31;
-        return h;
     }
 
     private static TelemetrySubmission toSubmission(UUID deviceId, EnvironmentalTelemetry reading) {

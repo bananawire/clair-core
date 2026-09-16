@@ -54,13 +54,16 @@ JWT_REFRESH_EXPIRATION=604800000
 # CORS — tu web app Angular
 CORS_ALLOWED_ORIGINS=http://localhost:4200
 
-# Synthetic telemetry for local/demo runs (disabled by default)
-CLAIRCORE_SYNTHETIC_TELEMETRY_ENABLED=false
-CLAIRCORE_SYNTHETIC_TELEMETRY_INTERVAL_MS=5000
-CLAIRCORE_SYNTHETIC_TELEMETRY_INITIAL_DELAY_MS=15000
-CLAIRCORE_SYNTHETIC_TELEMETRY_SCENARIO=MIXED
-CLAIRCORE_SYNTHETIC_TELEMETRY_SEED=0
-CLAIRCORE_SYNTHETIC_TELEMETRY_TARGET_LIMIT=50
+# LocalEdge synthetic telemetry and in-process command simulator (disabled by default)
+CLAIRCORE_LOCAL_EDGE_ENABLED=false
+CLAIRCORE_LOCAL_EDGE_INTERVAL_MS=15000
+CLAIRCORE_LOCAL_EDGE_INITIAL_DELAY_MS=15000
+CLAIRCORE_LOCAL_EDGE_SCENARIO=MIXED
+CLAIRCORE_LOCAL_EDGE_SEED=0
+CLAIRCORE_LOCAL_EDGE_TARGET_LIMIT=50
+CLAIRCORE_LOCAL_EDGE_COMMAND_POLL_MS=5000
+CLAIRCORE_LOCAL_EDGE_COMMAND_BATCH_SIZE=25
+CLAIRCORE_LOCAL_EDGE_COMMAND_LEASE_SECONDS=60
 
 # Google OAuth 2.0
 GOOGLE_OAUTH_CLIENT_ID=your_google_client_id
@@ -119,12 +122,18 @@ core with the `local` profile. Every external integration has an explicit disabl
 Google login is refused (placeholder client id), Stripe checkout fails and plans stay FREEMIUM,
 push notifications fail and are logged, and sign-up emails land in Mailpit at http://localhost:8025.
 Synthetic telemetry is disabled by default; enable it explicitly for the demo run. It starts after
-15 seconds and emits one reading per device every 5 seconds.
+15 seconds and emits one reading per device every 15 seconds. Each reading follows an AR(1) process
+with a sinusoidal seasonal mean and occasional exogenous shocks (cooking → PM2.5, occupancy → CO₂),
+so consecutive readings drift smoothly instead of jumping band-to-band.
 
 ```bash
 docker compose -f docker-compose.local.yml up -d
-CLAIRCORE_SYNTHETIC_TELEMETRY_ENABLED=true SPRING_PROFILES_ACTIVE=local,demo mvn spring-boot:run
+CLAIRCORE_LOCAL_EDGE_ENABLED=true SPRING_PROFILES_ACTIVE=local,demo mvn spring-boot:run
 ```
+
+The override is read directly from the Spring property `claircore.local-edge.enabled`
+(see `application.yml`). If you'd rather not pass it on the command line, flip that key
+to `true` in `application.yml` for the run.
 
 The local synthetic generator is not an external edge integration; it writes directly through the
 Device and Evaluation bounded-context interfaces.

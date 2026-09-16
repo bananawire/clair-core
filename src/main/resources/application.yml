@@ -109,12 +109,15 @@ springdoc:
 # it does not configure or contact an external edge service.
 claircore:
   local-edge:
-    enabled: ${CLAIRCORE_SYNTHETIC_TELEMETRY_ENABLED:false}
-    interval-ms: ${CLAIRCORE_SYNTHETIC_TELEMETRY_INTERVAL_MS:5000}
-    initial-delay-ms: ${CLAIRCORE_SYNTHETIC_TELEMETRY_INITIAL_DELAY_MS:15000}
-    scenario: ${CLAIRCORE_SYNTHETIC_TELEMETRY_SCENARIO:MIXED}
-    seed: ${CLAIRCORE_SYNTHETIC_TELEMETRY_SEED:0}
-    target-limit: ${CLAIRCORE_SYNTHETIC_TELEMETRY_TARGET_LIMIT:50}
+    enabled: ${CLAIRCORE_LOCAL_EDGE_ENABLED:true}
+    interval-ms: ${CLAIRCORE_LOCAL_EDGE_INTERVAL_MS:15000}
+    initial-delay-ms: ${CLAIRCORE_LOCAL_EDGE_INITIAL_DELAY_MS:15000}
+    scenario: ${CLAIRCORE_LOCAL_EDGE_SCENARIO:MIXED}
+    seed: ${CLAIRCORE_LOCAL_EDGE_SEED:0}
+    target-limit: ${CLAIRCORE_LOCAL_EDGE_TARGET_LIMIT:50}
+    command-poll-ms: ${CLAIRCORE_LOCAL_EDGE_COMMAND_POLL_MS:5000}
+    command-batch-size: ${CLAIRCORE_LOCAL_EDGE_COMMAND_BATCH_SIZE:25}
+    command-lease-seconds: ${CLAIRCORE_LOCAL_EDGE_COMMAND_LEASE_SECONDS:60}
 
 resilience4j:
   circuitbreaker:

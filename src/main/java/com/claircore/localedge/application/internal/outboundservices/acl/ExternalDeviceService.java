@@ -2,17 +2,19 @@ package com.claircore.localedge.application.internal.outboundservices.acl;
 
 import com.claircore.device.interfaces.acl.DeviceContextFacade;
 import com.claircore.device.interfaces.acl.DeviceTelemetryTarget;
+import com.claircore.device.interfaces.acl.DeviceCommandForEdge;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import java.util.List;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
 /**
  * Consumer-side ACL facade wrapping the device bounded context. LocalEdge uses it through this
- * narrow surface instead of touching {@code DeviceRepository} or {@code DeviceAssignmentRepository}
- * directly, which keeps the BC isolation enforced.
+ * narrow surface instead of touching device persistence directly, which keeps the BC isolation
+ * enforced.
  */
 @org.springframework.stereotype.Service("localedgeExternalDeviceService")
 @ConditionalOnProperty(name = "claircore.local-edge.enabled", havingValue = "true", matchIfMissing = false)
@@ -30,8 +32,8 @@ public class ExternalDeviceService {
      * drops readings whose device is not in the device inventory, which would never happen here
      * because we asked the device BC for the list.
      */
-    public List<DeviceTelemetryTarget> findTelemetryTargets(int limit, boolean includeUnassigned) {
-        return deviceContextFacade.findTelemetryTargets(limit, includeUnassigned);
+    public List<DeviceTelemetryTarget> findTelemetryTargets(int limit, boolean includeDeleted) {
+        return deviceContextFacade.findTelemetryTargets(limit, includeDeleted);
     }
 
     /** Marks the device as ONLINE at the given instant. */
@@ -41,5 +43,18 @@ public class ExternalDeviceService {
 
     public Optional<UUID> findDeviceIdByHardwareId(String hardwareId) {
         return deviceContextFacade.findDeviceIdByHardwareId(hardwareId);
+    }
+
+    public List<DeviceCommandForEdge> findClaimableCommands(Instant leaseCutoff, int limit) {
+        return deviceContextFacade.findClaimableCommands(leaseCutoff, limit);
+    }
+
+    public Optional<DeviceCommandForEdge> claimCommand(UUID commandId, Instant leaseCutoff, Instant claimedAt) {
+        return deviceContextFacade.claimCommand(commandId, leaseCutoff, claimedAt);
+    }
+
+    public void acknowledgeCommand(DeviceCommandForEdge command, boolean success, String reason) {
+        deviceContextFacade.acknowledgeCommand(command.deviceId(), command.commandId(),
+                success ? "EXECUTED" : "FAILED", reason);
     }
 }

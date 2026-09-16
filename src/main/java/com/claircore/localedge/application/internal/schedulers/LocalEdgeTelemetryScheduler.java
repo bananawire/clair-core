@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Drives the LocalEdge bounded context on a timer. Reads the interval from
- * {@code claircore.local-edge.interval-ms} (default 5000 ms) and starts after
+ * {@code claircore.local-edge.interval-ms} (default 15000 ms) and starts after
  * {@code claircore.local-edge.initial-delay-ms} (default 15000 ms). Enabled only when
  * {@code claircore.local-edge.enabled} is exactly {@code "true"}.
  *
@@ -58,7 +58,7 @@ public class LocalEdgeTelemetryScheduler {
     }
 
     @Scheduled(
-            fixedDelayString = "${claircore.local-edge.interval-ms:5000}",
+            fixedDelayString = "${claircore.local-edge.interval-ms:15000}",
             initialDelayString = "${claircore.local-edge.initial-delay-ms:15000}")
     public void cycle() {
         if (targetLimit <= 0) {
@@ -74,7 +74,15 @@ public class LocalEdgeTelemetryScheduler {
             return;
         }
 
-        List<UUID> deviceIds = targets.stream().map(DeviceTelemetryTarget::deviceId).toList();
+        List<UUID> deviceIds = targets.stream()
+                .filter(target -> !target.isStandby())
+                .map(DeviceTelemetryTarget::deviceId)
+                .distinct()
+                .toList();
+        if (deviceIds.isEmpty()) {
+            LOGGER.info("LocalEdge scheduler found no active telemetry targets");
+            return;
+        }
         int recorded = commandService.handle(new GenerateSyntheticTelemetryCommand(
                 deviceIds, scenario, seed, Instant.now()));
         LOGGER.info("LocalEdge scheduler emitted {} readings to evaluation BC (targets={})",

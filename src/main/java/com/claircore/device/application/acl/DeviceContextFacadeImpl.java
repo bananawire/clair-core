@@ -11,10 +11,15 @@ import com.claircore.device.domain.model.queries.GetDevicesForTelemetryQuery;
 import com.claircore.device.domain.model.valueobjects.UserId;
 import com.claircore.device.domain.model.aggregates.DeviceAssignment;
 import com.claircore.device.application.queryservices.DeviceQueryService;
+import com.claircore.device.application.queryservices.DeviceCommandQueryService;
+import com.claircore.device.application.commandservices.DeviceControlCommandService;
+import com.claircore.device.domain.model.commands.AcknowledgeDeviceCommandCommand;
+import com.claircore.device.domain.model.valueobjects.DeviceCommandStatus;
 import com.claircore.device.interfaces.acl.DeviceContextFacade;
 import com.claircore.device.interfaces.acl.OrganizationSummary;
 import com.claircore.device.interfaces.acl.SpaceSummary;
 import com.claircore.device.interfaces.acl.DeviceTelemetryTarget;
+import com.claircore.device.interfaces.acl.DeviceCommandForEdge;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -26,9 +31,20 @@ import java.util.UUID;
 public class DeviceContextFacadeImpl implements DeviceContextFacade {
 
     private final DeviceQueryService deviceQueryService;
+    private final DeviceCommandQueryService deviceCommandQueryService;
+    private final DeviceControlCommandService deviceControlCommandService;
 
     public DeviceContextFacadeImpl(DeviceQueryService deviceQueryService) {
+        this(deviceQueryService, null, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DeviceContextFacadeImpl(DeviceQueryService deviceQueryService,
+                                   DeviceCommandQueryService deviceCommandQueryService,
+                                   DeviceControlCommandService deviceControlCommandService) {
         this.deviceQueryService = deviceQueryService;
+        this.deviceCommandQueryService = deviceCommandQueryService;
+        this.deviceControlCommandService = deviceControlCommandService;
     }
 
     @Override
@@ -139,16 +155,45 @@ public class DeviceContextFacadeImpl implements DeviceContextFacade {
     }
 
     @Override
-    public List<DeviceTelemetryTarget> findTelemetryTargets(int limit, boolean includeUnassigned) {
+    public List<DeviceTelemetryTarget> findTelemetryTargets(int limit, boolean includeDeleted) {
         int size = limit > 0 ? Math.min(limit, 500) : 50;
-        var page = deviceQueryService.handle(new GetDevicesForTelemetryQuery(size, includeUnassigned));
-        return page.items().stream()
-                .map(device -> new DeviceTelemetryTarget(
-                        device.getId(),
-                        device.getHardwareId().value(),
-                        device.getName(),
-                        deviceQueryService.findAssignmentByDeviceId(device.getId()).isPresent()))
-                .toList();
+        var page = deviceQueryService.handle(new GetDevicesForTelemetryQuery(size, includeDeleted));
+        return page.items().stream().map(device -> {
+            var assignment = deviceQueryService.findAssignmentByDeviceId(device.getId());
+            return new DeviceTelemetryTarget(device.getId(), device.getHardwareId().value(),
+                    device.getName(), assignment.isPresent(),
+                    assignment.map(DeviceAssignment::getStatus).map(status -> status.name()).orElse(null));
+        }).toList();
+    }
+
+    @Override
+    public List<DeviceCommandForEdge> findClaimableCommands(java.time.Instant leaseCutoff, int limit) {
+        return deviceCommandQueryService.findClaimableForEdge(leaseCutoff, limit).stream()
+                .map(DeviceContextFacadeImpl::toEdgeCommand).toList();
+    }
+
+    @Override
+    public Optional<DeviceCommandForEdge> claimCommand(UUID commandId, java.time.Instant leaseCutoff,
+                                                        java.time.Instant claimedAt) {
+        return deviceControlCommandService.claimForEdge(commandId, leaseCutoff, claimedAt)
+                .map(DeviceContextFacadeImpl::toEdgeCommand);
+    }
+
+    @Override
+    public Optional<DeviceCommandForEdge> acknowledgeCommand(UUID deviceId, UUID commandId,
+                                                               String status, String failureReason) {
+        DeviceCommandStatus parsed;
+        try { parsed = DeviceCommandStatus.valueOf(status); }
+        catch (IllegalArgumentException | NullPointerException ex) {
+            throw new IllegalArgumentException("Unknown command ACK status: " + status, ex);
+        }
+        return Optional.of(toEdgeCommand(deviceControlCommandService.handle(
+                new AcknowledgeDeviceCommandCommand(deviceId, commandId, parsed, failureReason))));
+    }
+
+    private static DeviceCommandForEdge toEdgeCommand(com.claircore.device.domain.model.aggregates.DeviceCommand command) {
+        return new DeviceCommandForEdge(command.getId(), command.getDeviceId(), command.getAssignmentId(),
+                command.getType().name(), command.getPayload(), command.getSentAt());
     }
 
     @Override

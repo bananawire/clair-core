@@ -14,7 +14,10 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Issues STANDBY/WAKE/RESTART commands against a device and applies the acknowledgements that
@@ -74,10 +77,35 @@ public class DeviceControlCommandServiceImpl implements DeviceControlCommandServ
 
     @Override
     @Transactional
+    public Optional<DeviceCommand> claimForEdge(UUID commandId, Instant leaseCutoff, Instant claimedAt) {
+        if (commandId == null || leaseCutoff == null || claimedAt == null) {
+            throw new IllegalArgumentException("commandId, leaseCutoff, and claimedAt are required");
+        }
+        if (deviceCommandRepository.claimForEdge(commandId, leaseCutoff, claimedAt) == 0) {
+            return Optional.empty();
+        }
+        return deviceCommandRepository.findById(commandId);
+    }
+
+    @Override
+    @Transactional
     public DeviceCommand handle(AcknowledgeDeviceCommandCommand command) {
-        DeviceCommand deviceCommand = deviceCommandRepository
-                .findByDeviceIdAndCommandId(command.deviceId(), command.commandId())
+        Optional<DeviceCommand> locked = deviceCommandRepository.findByIdForAcknowledgement(command.commandId());
+        // The fallback keeps lightweight adapters compatible; the JPA adapter returns the
+        // pessimistically locked lookup above. A real command cannot disappear between these
+        // lookups without also becoming unusable, while test/double adapters may not implement
+        // the lock-aware method.
+        if (locked == null || locked.isEmpty()) {
+            locked = deviceCommandRepository.findByDeviceIdAndCommandId(command.deviceId(), command.commandId());
+        }
+        DeviceCommand deviceCommand = locked
+                .filter(found -> found.getDeviceId().equals(command.deviceId()))
                 .orElseThrow(() -> new IllegalArgumentException("Device command not found"));
+        if (deviceCommand.getStatus() == DeviceCommandStatus.EXECUTED
+                || deviceCommand.getStatus() == DeviceCommandStatus.FAILED
+                || deviceCommand.getStatus() == DeviceCommandStatus.EXPIRED) {
+            return deviceCommand;
+        }
         DeviceAssignment assignment = deviceAssignmentRepository
                 .findByDeviceIdForUpdate(deviceCommand.getDeviceId())
                 .orElseThrow(() -> new IllegalArgumentException("Device assignment not found"));

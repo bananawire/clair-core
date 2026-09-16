@@ -69,12 +69,23 @@ public interface DeviceContextFacade {
      * any aggregate the device BC owns internally.
      *
      * @param limit                hard cap on the page size; bounded to 1..500 by the implementation
-     * @param includeUnassigned    whether devices without an assignment are included
+     * @param includeDeleted       whether deleted inventory rows are included
      */
-    List<DeviceTelemetryTarget> findTelemetryTargets(int limit, boolean includeUnassigned);
+    List<DeviceTelemetryTarget> findTelemetryTargets(int limit, boolean includeDeleted);
 
     /**
      * Records one device presence event in occurrence order. Unknown strings are rejected.
      */
     void recordDevicePresence(java.util.UUID deviceId, String status, java.time.Instant occurredAt);
+
+    /** Returns a bounded page of pending or lease-expired commands for the in-process edge. */
+    List<DeviceCommandForEdge> findClaimableCommands(java.time.Instant leaseCutoff, int limit);
+
+    /** Atomically claims one command and refreshes its SENT lease. */
+    Optional<DeviceCommandForEdge> claimCommand(UUID commandId, java.time.Instant leaseCutoff,
+                                                 java.time.Instant claimedAt);
+
+    /** Applies an EXECUTED or FAILED result; terminal acknowledgements are idempotent. */
+    Optional<DeviceCommandForEdge> acknowledgeCommand(UUID deviceId, UUID commandId,
+                                                       String status, String failureReason);
 }

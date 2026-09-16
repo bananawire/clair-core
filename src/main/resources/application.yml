@@ -105,6 +105,17 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 
+# Synthetic telemetry generator for local/demo runs. It is disabled unless explicitly enabled;
+# it does not configure or contact an external edge service.
+claircore:
+  local-edge:
+    enabled: ${CLAIRCORE_SYNTHETIC_TELEMETRY_ENABLED:false}
+    interval-ms: ${CLAIRCORE_SYNTHETIC_TELEMETRY_INTERVAL_MS:5000}
+    initial-delay-ms: ${CLAIRCORE_SYNTHETIC_TELEMETRY_INITIAL_DELAY_MS:15000}
+    scenario: ${CLAIRCORE_SYNTHETIC_TELEMETRY_SCENARIO:MIXED}
+    seed: ${CLAIRCORE_SYNTHETIC_TELEMETRY_SEED:0}
+    target-limit: ${CLAIRCORE_SYNTHETIC_TELEMETRY_TARGET_LIMIT:50}
+
 resilience4j:
   circuitbreaker:
     instances:

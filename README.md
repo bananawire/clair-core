@@ -54,6 +54,14 @@ JWT_REFRESH_EXPIRATION=604800000
 # CORS — tu web app Angular
 CORS_ALLOWED_ORIGINS=http://localhost:4200
 
+# Synthetic telemetry for local/demo runs (disabled by default)
+CLAIRCORE_SYNTHETIC_TELEMETRY_ENABLED=false
+CLAIRCORE_SYNTHETIC_TELEMETRY_INTERVAL_MS=5000
+CLAIRCORE_SYNTHETIC_TELEMETRY_INITIAL_DELAY_MS=15000
+CLAIRCORE_SYNTHETIC_TELEMETRY_SCENARIO=MIXED
+CLAIRCORE_SYNTHETIC_TELEMETRY_SEED=0
+CLAIRCORE_SYNTHETIC_TELEMETRY_TARGET_LIMIT=50
+
 # Google OAuth 2.0
 GOOGLE_OAUTH_CLIENT_ID=your_google_client_id
 GOOGLE_OAUTH_ALLOWED_CLIENT_IDS=your_google_client_id
@@ -110,11 +118,16 @@ Start PostgreSQL, Redis and Mailpit with the compose file in the parent director
 core with the `local` profile. Every external integration has an explicit disabled behaviour:
 Google login is refused (placeholder client id), Stripe checkout fails and plans stay FREEMIUM,
 push notifications fail and are logged, and sign-up emails land in Mailpit at http://localhost:8025.
+Synthetic telemetry is disabled by default; enable it explicitly for the demo run. It starts after
+15 seconds and emits one reading per device every 5 seconds.
 
 ```bash
 docker compose -f docker-compose.local.yml up -d
-SPRING_PROFILES_ACTIVE=local,demo mvn spring-boot:run     # demo seeds CLAIR-0001..0005 and writes provisioned-devices.csv
+CLAIRCORE_SYNTHETIC_TELEMETRY_ENABLED=true SPRING_PROFILES_ACTIVE=local,demo mvn spring-boot:run
 ```
+
+The local synthetic generator is not an external edge integration; it writes directly through the
+Device and Evaluation bounded-context interfaces.
 
 `SMTP_AUTH`, `SMTP_SSL` and `SMTP_STARTTLS` control the mail transport in every profile. The full
 laptop runbook, including the edge and the device, is `docs/RUNBOOK.md`.

@@ -13,14 +13,14 @@ import com.claircore.localedge.domain.services.SyntheticTelemetryGeneratorPolicy
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -31,16 +31,15 @@ import java.util.UUID;
  *   <li>Fetch up to {@code limit} telemetry targets from the device BC.</li>
  *   <li>Generate one {@link EnvironmentalTelemetry} per device via {@link SyntheticTelemetryGeneratorPolicy}.</li>
  *   <li>Record each reading via the evaluation BC ACL.</li>
- *   <li>Record {@code ONLINE} presence for each device so the device BC's {@code presenceAt}
- *       timestamp stays current.</li>
+ *   <li>Record {@code ONLINE} presence for each assigned device so the device BC's
+ *       {@code presenceAt} timestamp stays current. Inventory-only devices have no assignment
+ *       row, so their telemetry is stored without a presence update.</li>
  * </ol>
  *
  * <p>The LocalEdge transaction is required: each downstream ACL call commits in its own
  * transaction anyway, but this lets the cycle summary roll back without losing what already
  * reached the Evaluation BC.
  */
-@Service
-@ConditionalOnProperty(name = "claircore.local-edge.enabled", havingValue = "true", matchIfMissing = false)
 public class LocalEdgeTelemetryCommandServiceImpl implements LocalEdgeTelemetryCommandService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LocalEdgeTelemetryCommandServiceImpl.class);
@@ -76,6 +75,11 @@ public class LocalEdgeTelemetryCommandServiceImpl implements LocalEdgeTelemetryC
         if (targets.isEmpty()) {
             LOGGER.info("LocalEdge cycle found no telemetry targets");
             return new CycleOutcome(0, 0, 0);
+        }
+
+        Map<UUID, Boolean> assignedByDevice = new HashMap<>();
+        for (DeviceTelemetryTarget target : targets) {
+            assignedByDevice.put(target.deviceId(), target.assigned());
         }
 
         List<UUID> deviceIds = command.deviceIds();
@@ -116,8 +120,15 @@ public class LocalEdgeTelemetryCommandServiceImpl implements LocalEdgeTelemetryC
             }
         }
 
+        // Inventory-only devices are valid telemetry sources but do not have an assignment row
+        // whose presence timestamp can be updated. Skip them before calling the transactional
+        // Device BC operation; otherwise its expected exception would mark this cycle rollback-only.
         int presenceUpdates = 0;
         for (UUID deviceId : deviceIds) {
+            if (!assignedByDevice.getOrDefault(deviceId, false)) {
+                LOGGER.debug("LocalEdge presence skipped for unassigned device {}", deviceId);
+                continue;
+            }
             try {
                 externalDeviceService.recordPresence(deviceId, PRESENCE_ONLINE, now);
                 presenceUpdates++;

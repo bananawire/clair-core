@@ -71,6 +71,23 @@ class LocalEdgeTelemetryCommandServiceImplTest {
     }
 
     @Test
+    void unassignedTargetReceivesTelemetryButNotPresenceUpdate() {
+        UUID device = UUID.randomUUID();
+        when(externalDeviceService.findTelemetryTargets(eq(1), anyBoolean()))
+                .thenReturn(List.of(new DeviceTelemetryTarget(device, "HW-0001", "Sensor 1", false)));
+        when(externalEvaluationService.recordTelemetry(any()))
+                .thenReturn(TelemetryRecordingResult.accepted(UUID.randomUUID(), NOW));
+
+        var command = new GenerateSyntheticTelemetryCommand(List.of(device), SimulationScenario.MIXED, 1L, NOW);
+        LocalEdgeTelemetryCommandServiceImpl.CycleOutcome outcome = service.runCycle(command);
+
+        assertThat(outcome.accepted()).isEqualTo(1);
+        assertThat(outcome.rejected()).isZero();
+        assertThat(outcome.presenceUpdates()).isZero();
+        verify(externalDeviceService, never()).recordPresence(any(), anyString(), any());
+    }
+
+    @Test
     void emptyTargetListSkipsTheCycle() {
         when(externalDeviceService.findTelemetryTargets(anyInt(), anyBoolean())).thenReturn(List.of());
 

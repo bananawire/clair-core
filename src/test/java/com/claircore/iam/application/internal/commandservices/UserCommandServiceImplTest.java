@@ -3,16 +3,16 @@ package com.claircore.iam.application.internal.commandservices;
 import com.claircore.iam.application.internal.outboundservices.acl.AsyncNotificationService;
 import com.claircore.iam.domain.model.commands.ConfirmRegistrationCommand;
 import com.claircore.iam.domain.model.commands.InitiateRegistrationCommand;
-import com.claircore.iam.domain.model.entities.RegistrationSession;
-import com.claircore.iam.domain.model.entities.User;
-import com.claircore.iam.domain.model.events.UserRegisteredEvent;
+import com.claircore.iam.domain.model.aggregates.RegistrationSession;
+import com.claircore.iam.domain.model.aggregates.User;
+import com.claircore.iam.interfaces.events.UserRegisteredIntegrationEvent;
 import com.claircore.iam.domain.model.valueobjects.EmailAddress;
 import com.claircore.iam.domain.model.valueobjects.OAuthProvider;
 import com.claircore.iam.domain.model.valueobjects.Password;
 import com.claircore.iam.domain.model.valueobjects.RegistrationSessionId;
 import com.claircore.iam.domain.model.valueobjects.VerificationCode;
-import com.claircore.iam.infrastructure.persistence.jpa.repositories.UserRepository;
-import com.claircore.iam.infrastructure.persistence.redis.repositories.RegistrationSessionRepository;
+import com.claircore.iam.domain.repositories.UserRepository;
+import com.claircore.iam.domain.repositories.RegistrationSessionRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -114,7 +114,8 @@ class UserCommandServiceImplTest {
                     com.claircore.iam.domain.model.valueobjects.UserStatus.ACTIVE,
                     user.getOauthProvider(),
                     user.getOauthSubject()
-            );
+            ,
+                null, null);
         });
 
         var result = service.handle(new ConfirmRegistrationCommand(session.sessionId(), "6G13-789D"));
@@ -126,7 +127,7 @@ class UserCommandServiceImplTest {
         assertTrue(result.get().isActive());
         verify(registrationSessionRepository).deleteById(session.sessionId());
         verify(asyncNotificationService).sendWelcomeEmail("user@example.com");
-        verify(eventPublisher).publishEvent(org.mockito.ArgumentMatchers.any(UserRegisteredEvent.class));
+        verify(eventPublisher).publishEvent(org.mockito.ArgumentMatchers.any(UserRegisteredIntegrationEvent.class));
     }
 
     @Test

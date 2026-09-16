@@ -9,7 +9,7 @@ class ParticulateMatterTest {
     @Test
     void shouldCreateParticulateMatterWhenValuesAreValid() {
         // Arrange & Act
-        ParticulateMatter particulateMatter = new ParticulateMatter(12, 18, 35);
+        ParticulateMatter particulateMatter = new ParticulateMatter(12.0, 18.0, 35.0);
 
         // Assert
         assertThat(particulateMatter.pm1_0()).isEqualTo(12);
@@ -20,24 +20,29 @@ class ParticulateMatterTest {
     @Test
     void shouldThrowExceptionWhenPm1_0IsNull() {
         // Arrange, Act & Assert
-        assertThatThrownBy(() -> new ParticulateMatter(null, 18, 35))
+        assertThatThrownBy(() -> new ParticulateMatter(null, 18.0, 35.0))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("pm1_0 must not be null");
+                .hasMessageContaining("pm1_0 must be finite");
     }
 
     @Test
     void shouldThrowExceptionWhenPm2_5IsNull() {
         // Arrange, Act & Assert
-        assertThatThrownBy(() -> new ParticulateMatter(12, null, 35))
+        assertThatThrownBy(() -> new ParticulateMatter(12.0, null, 35.0))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("pm2_5 must not be null");
+                .hasMessageContaining("pm2_5 must be finite");
     }
 
     @Test
     void shouldThrowExceptionWhenPm10IsNull() {
         // Arrange, Act & Assert
-        assertThatThrownBy(() -> new ParticulateMatter(12, 18, null))
+        assertThatThrownBy(() -> new ParticulateMatter(12.0, 18.0, null))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("pm10 must not be null");
+                .hasMessageContaining("pm10 must be finite");
+    }
+    @Test void preservesPrecisionAndRejectsInvalidParticles() {
+        assertThat(new ParticulateMatter(1.25, 12.45, 20.75).pm2_5()).isEqualTo(12.45);
+        for (double value : new double[]{-1, 10001, Double.NaN, Double.POSITIVE_INFINITY})
+            assertThatThrownBy(() -> new ParticulateMatter(1.0, value, 20.0)).isInstanceOf(IllegalArgumentException.class);
     }
 }

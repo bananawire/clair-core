@@ -1,14 +1,15 @@
 package com.claircore.alerting.application.internal.queryservices;
 
-import com.claircore.alerting.domain.model.entities.Alert;
+import com.claircore.alerting.application.internal.outboundservices.acl.ExternalAlertingDeviceService;
+import com.claircore.alerting.application.queryservices.AlertQueryService;
+import com.claircore.alerting.domain.model.aggregates.Alert;
 import com.claircore.alerting.domain.model.queries.GetAlertsByDeviceQuery;
 import com.claircore.alerting.domain.model.queries.GetAlertsByOwnerQuery;
 import com.claircore.alerting.domain.model.queries.GetAlertsBySpaceQuery;
 import com.claircore.alerting.domain.model.valueobjects.AlertStatus;
 import com.claircore.alerting.domain.model.valueobjects.DailyAlertCount;
-import com.claircore.alerting.domain.services.AlertQueryService;
-import com.claircore.alerting.infrastructure.persistence.jpa.repositories.AlertRepository;
-import org.springframework.data.domain.Page;
+import com.claircore.alerting.domain.repositories.AlertRepository;
+import com.claircore.shared.domain.model.PageResult;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,62 +23,86 @@ import java.util.UUID;
 public class AlertQueryServiceImpl implements AlertQueryService {
 
     private final AlertRepository alertRepository;
+    private final ExternalAlertingDeviceService externalDeviceService;
 
-    public AlertQueryServiceImpl(AlertRepository alertRepository) {
+    public AlertQueryServiceImpl(AlertRepository alertRepository,
+                                 ExternalAlertingDeviceService externalDeviceService) {
         this.alertRepository = alertRepository;
+        this.externalDeviceService = externalDeviceService;
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Alert> fetchByDevice(GetAlertsByDeviceQuery query) {
-        return alertRepository.findByDeviceId(query.deviceId(), query.pageable());
+    public java.util.Optional<Alert> findById(UUID alertId) {
+        return alertRepository.findById(alertId);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Alert> fetchBySpace(GetAlertsBySpaceQuery query) {
-        return alertRepository.findBySpaceId(query.spaceId(), query.pageable());
+    public List<Alert> findActiveByDeviceId(UUID deviceId) {
+        return alertRepository.findByDeviceIdAndStatus(deviceId, AlertStatus.ACTIVE);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Alert> fetchByOwner(GetAlertsByOwnerQuery query, List<UUID> ownerDeviceIds) {
+    public List<Alert> findRecentByOwnerId(UUID ownerId, List<AlertStatus> statuses, int limit) {
+        if (ownerId == null || limit <= 0) return List.of();
+        var deviceIds = externalDeviceService.fetchDeviceIdsByOwnerId(ownerId);
+        if (deviceIds == null || deviceIds.isEmpty()) return List.of();
+        return (statuses.isEmpty()
+                ? alertRepository.findByDeviceIdIn(deviceIds, 0, limit)
+                : alertRepository.findByDeviceIdInAndStatusIn(deviceIds, statuses, 0, limit)).items();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResult<Alert> fetchByDevice(GetAlertsByDeviceQuery query) {
+        return alertRepository.findByDeviceId(query.deviceId(), query.page(), query.size());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResult<Alert> fetchBySpace(GetAlertsBySpaceQuery query) {
+        return alertRepository.findBySpaceId(query.spaceId(), query.page(), query.size());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResult<Alert> fetchByOwner(GetAlertsByOwnerQuery query, List<UUID> ownerDeviceIds) {
         if (ownerDeviceIds == null || ownerDeviceIds.isEmpty()) {
-            return Page.empty(query.pageable());
+            return PageResult.empty(query.page(), query.size());
         }
-        return alertRepository.findByDeviceIdIn(ownerDeviceIds, query.pageable());
+        return alertRepository.findByDeviceIdIn(ownerDeviceIds, query.page(), query.size());
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Alert> fetchByDeviceAndStatus(GetAlertsByDeviceQuery query, List<AlertStatus> statuses) {
-        return alertRepository.findByDeviceIdAndStatusIn(query.deviceId(), statuses, query.pageable());
+    public PageResult<Alert> fetchByDeviceAndStatus(GetAlertsByDeviceQuery query, List<AlertStatus> statuses) {
+        return alertRepository.findByDeviceIdAndStatusIn(query.deviceId(), statuses, query.page(), query.size());
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Alert> fetchBySpaceAndStatus(GetAlertsBySpaceQuery query, List<AlertStatus> statuses) {
-        return alertRepository.findBySpaceIdAndStatusIn(query.spaceId(), statuses, query.pageable());
+    public PageResult<Alert> fetchBySpaceAndStatus(GetAlertsBySpaceQuery query, List<AlertStatus> statuses) {
+        return alertRepository.findBySpaceIdAndStatusIn(query.spaceId(), statuses, query.page(), query.size());
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Alert> fetchByOwnerAndStatus(GetAlertsByOwnerQuery query, List<UUID> ownerDeviceIds, List<AlertStatus> statuses) {
+    public PageResult<Alert> fetchByOwnerAndStatus(GetAlertsByOwnerQuery query, List<UUID> ownerDeviceIds, List<AlertStatus> statuses) {
         if (ownerDeviceIds == null || ownerDeviceIds.isEmpty()) {
-            return Page.empty(query.pageable());
+            return PageResult.empty(query.page(), query.size());
         }
         if (statuses == null || statuses.isEmpty()) {
             return fetchByOwner(query, ownerDeviceIds);
         }
-        return alertRepository.findByDeviceIdInAndStatusIn(ownerDeviceIds, statuses, query.pageable());
+        return alertRepository.findByDeviceIdInAndStatusIn(ownerDeviceIds, statuses, query.page(), query.size());
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<DailyAlertCount> fetchDailySummaryBySpace(UUID spaceId, int days) {
-        Instant since = LocalDate.now(ZoneOffset.UTC).minusDays(days).atStartOfDay(ZoneOffset.UTC).toInstant();
-        List<Object[]> results = alertRepository.countAlertsPerDay(spaceId, since);
-        return toDailyAlertCounts(results);
+        return alertRepository.countAlertsPerDayBySpaceId(spaceId, since(days));
     }
 
     @Override
@@ -86,14 +111,10 @@ public class AlertQueryServiceImpl implements AlertQueryService {
         if (ownerDeviceIds == null || ownerDeviceIds.isEmpty()) {
             return List.of();
         }
-        Instant since = LocalDate.now(ZoneOffset.UTC).minusDays(days).atStartOfDay(ZoneOffset.UTC).toInstant();
-        List<Object[]> results = alertRepository.countAlertsPerDayByDeviceIds(ownerDeviceIds, since);
-        return toDailyAlertCounts(results);
+        return alertRepository.countAlertsPerDayByDeviceIds(ownerDeviceIds, since(days));
     }
 
-    private List<DailyAlertCount> toDailyAlertCounts(List<Object[]> results) {
-        return results.stream()
-                .map(row -> new DailyAlertCount((LocalDate) row[0], ((Number) row[1]).longValue()))
-                .toList();
+    private static Instant since(int days) {
+        return LocalDate.now(ZoneOffset.UTC).minusDays(days).atStartOfDay(ZoneOffset.UTC).toInstant();
     }
 }

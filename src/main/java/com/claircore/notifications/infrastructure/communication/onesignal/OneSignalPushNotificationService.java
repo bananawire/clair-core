@@ -1,6 +1,6 @@
 package com.claircore.notifications.infrastructure.communication.onesignal;
 
-import com.claircore.notifications.domain.services.PushNotificationDeliveryService;
+import com.claircore.notifications.application.internal.outboundservices.push.PushNotificationDeliveryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

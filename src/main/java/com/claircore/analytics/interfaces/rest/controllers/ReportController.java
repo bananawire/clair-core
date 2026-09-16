@@ -5,18 +5,17 @@ import com.claircore.analytics.application.internal.outboundservices.acl.Externa
 import com.claircore.analytics.domain.model.queries.GetDailyReportQuery;
 import com.claircore.analytics.domain.model.queries.GetMonthlyReportQuery;
 import com.claircore.analytics.domain.model.valueobjects.DeviceId;
-import com.claircore.analytics.domain.services.DailyReportQueryService;
-import com.claircore.analytics.domain.services.MonthlyReportQueryService;
+import com.claircore.analytics.application.queryservices.DailyReportQueryService;
+import com.claircore.analytics.application.queryservices.MonthlyReportQueryService;
 import com.claircore.analytics.interfaces.rest.resources.DailyReportResponse;
 import com.claircore.analytics.interfaces.rest.resources.MonthlyReportResponse;
-import com.claircore.analytics.interfaces.rest.transform.AnalyticsTransform;
-import com.claircore.iam.infrastructure.tokens.jwt.JwtAuthenticationFilter;
+import com.claircore.analytics.interfaces.rest.transform.AnalyticsResourceFromEntityAssembler;
+import com.claircore.shared.interfaces.rest.security.CurrentUserId;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.*;
@@ -56,17 +55,17 @@ public class ReportController {
             @ApiResponse(responseCode = "404", description = "No report available for the given day")
     })
     public ResponseEntity<DailyReportResponse> getDailyReport(
-            HttpServletRequest httpRequest,
+            @CurrentUserId UUID userId,
             @Parameter(description = "Device UUID") @PathVariable UUID deviceId,
             @Parameter(description = "Calendar day YYYY-MM-DD; omit for the latest completed day", example = "2026-05-27")
             @RequestParam(required = false) String date
     ) {
-        requireDeviceOwnership(deviceId, currentUser(httpRequest));
+        requireDeviceOwnership(deviceId, userId);
 
         LocalDate parsedDate = date == null ? null : parseDate(date);
         var query = new GetDailyReportQuery(new DeviceId(deviceId), parsedDate);
         return dailyReportQueryService.handle(query)
-                .map(AnalyticsTransform::toDailyReportResponse)
+                .map(AnalyticsResourceFromEntityAssembler::toDailyReportResponse)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -79,12 +78,11 @@ public class ReportController {
             @ApiResponse(responseCode = "404", description = "No report available for the given month")
     })
     public ResponseEntity<MonthlyReportResponse> getMonthlyReport(
-            HttpServletRequest httpRequest,
+            @CurrentUserId UUID userId,
             @Parameter(description = "Device UUID") @PathVariable UUID deviceId,
             @Parameter(description = "Month YYYY-MM; omit for the latest completed month", example = "2026-05")
             @RequestParam(required = false) String month
     ) {
-        UUID userId = currentUser(httpRequest);
         requireDeviceOwnership(deviceId, userId);
         if (!externalBillingService.canAccessMonthlyReports(userId)) {
             throw new AccessDeniedException("Monthly reports require a premium subscription");
@@ -95,13 +93,9 @@ public class ReportController {
                 : parseMonth(month);
         var query = new GetMonthlyReportQuery(new DeviceId(deviceId), parsedMonth);
         return monthlyReportQueryService.handle(query)
-                .map(AnalyticsTransform::toMonthlyReportResponse)
+                .map(AnalyticsResourceFromEntityAssembler::toMonthlyReportResponse)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
-    }
-
-    private UUID currentUser(HttpServletRequest request) {
-        return (UUID) request.getAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE);
     }
 
     private void requireDeviceOwnership(UUID deviceId, UUID userId) {

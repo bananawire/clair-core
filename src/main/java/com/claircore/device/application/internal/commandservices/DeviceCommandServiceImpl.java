@@ -1,30 +1,27 @@
 package com.claircore.device.application.internal.commandservices;
 
-import com.claircore.device.application.internal.outboundservices.acl.DeviceChangedIntegrationEvent;
 import com.claircore.device.application.internal.outboundservices.acl.ExternalBillingService;
-import com.claircore.device.application.internal.outboundservices.acl.ProvisioningDevicesChangedPublisher;
 import com.claircore.device.domain.model.commands.*;
-import com.claircore.device.domain.model.entities.Device;
-import com.claircore.device.domain.model.entities.DeviceAssignment;
-import com.claircore.device.domain.model.entities.Organization;
-import com.claircore.device.domain.model.entities.Space;
+import com.claircore.device.domain.model.aggregates.Device;
+import com.claircore.device.domain.model.aggregates.DeviceAssignment;
+import com.claircore.device.domain.model.aggregates.Space;
 import com.claircore.device.domain.model.valueobjects.*;
-import com.claircore.device.domain.services.DeviceCommandService;
-import com.claircore.device.infrastructure.persistence.jpa.repositories.DeviceAssignmentRepository;
-import com.claircore.device.infrastructure.persistence.jpa.repositories.DeviceRepository;
-import com.claircore.device.infrastructure.persistence.jpa.repositories.OrganizationRepository;
-import com.claircore.device.infrastructure.persistence.jpa.repositories.SpaceRepository;
+import com.claircore.device.application.commandservices.DeviceCommandService;
+import com.claircore.device.domain.repositories.DeviceAssignmentRepository;
+import com.claircore.device.domain.repositories.DeviceCommandRepository;
+import com.claircore.device.domain.repositories.DeviceRepository;
+import com.claircore.device.domain.repositories.OrganizationRepository;
+import com.claircore.device.domain.repositories.SpaceRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.access.AccessDeniedException;
 
-import java.time.Instant;
 import java.security.SecureRandom;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.data.domain.PageRequest;
 
 @Service
 public class DeviceCommandServiceImpl implements DeviceCommandService {
@@ -38,7 +35,7 @@ public class DeviceCommandServiceImpl implements DeviceCommandService {
     private final SpaceRepository spaceRepository;
     private final OrganizationRepository organizationRepository;
     private final ExternalBillingService externalBillingService;
-    private final ProvisioningDevicesChangedPublisher provisioningDevicesChangedPublisher;
+    private final DeviceCommandRepository deviceCommandRepository;
 
     public DeviceCommandServiceImpl(
             DeviceRepository deviceRepository,
@@ -46,13 +43,13 @@ public class DeviceCommandServiceImpl implements DeviceCommandService {
             SpaceRepository spaceRepository,
             OrganizationRepository organizationRepository,
             ExternalBillingService externalBillingService,
-            ProvisioningDevicesChangedPublisher provisioningDevicesChangedPublisher) {
+            DeviceCommandRepository deviceCommandRepository) {
         this.deviceRepository = deviceRepository;
         this.deviceAssignmentRepository = deviceAssignmentRepository;
         this.spaceRepository = spaceRepository;
         this.organizationRepository = organizationRepository;
         this.externalBillingService = externalBillingService;
-        this.provisioningDevicesChangedPublisher = provisioningDevicesChangedPublisher;
+        this.deviceCommandRepository = deviceCommandRepository;
     }
 
     @Override
@@ -85,12 +82,29 @@ public class DeviceCommandServiceImpl implements DeviceCommandService {
                 ApiKey.generate(),
                 new DeviceType("air-quality-v1")
             );
-            Device savedDevice = deviceRepository.save(device);
-            // Notify edge so it can reconcile its provisioning cache.
-            publishDeviceChanged(savedDevice, DeviceStatus.OFFLINE.name(), "CREATED");
-            seeded.add(savedDevice);
+            seeded.add(deviceRepository.save(device));
         }
         return seeded;
+    }
+
+    @Override
+    @Transactional
+    public List<Device> handle(ImportDevicesCommand command) {
+        List<Device> imported = new ArrayList<>();
+        for (var record : command.records()) {
+            if (deviceRepository.findBySerialNumber(record.serialNumber()).isPresent()
+                    || deviceRepository.existsByHardwareId(record.hardwareId())) {
+                continue;
+            }
+            Device saved = deviceRepository.save(new Device(
+                    record.serialNumber(),
+                    record.name(),
+                    new HardwareId(record.hardwareId()),
+                    new ApiKey(record.apiKey()),
+                    new DeviceType("air-quality-v1")));
+            imported.add(saved);
+        }
+        return imported;
     }
 
     private String generateUniqueHardwareId() {
@@ -115,24 +129,25 @@ public class DeviceCommandServiceImpl implements DeviceCommandService {
     @Override
     @Transactional
     public DeviceAssignment handle(PairDeviceCommand command) {
+        // The device row is the only thing two first pairings share; locking it serializes them so
+        // the loser sees the winner's assignment instead of racing the unique constraint.
         Device device = deviceRepository
-            .findByHardwareId(command.hardwareId())
+            .findByHardwareIdForUpdate(command.hardwareId())
             .orElseThrow(() -> new IllegalArgumentException("Device not registered in factory inventory"));
 
         Optional<DeviceAssignment> existingAssignment = deviceAssignmentRepository.findByDeviceIdForUpdate(device.getId());
         if (existingAssignment.isPresent()) {
             DeviceAssignment assignment = existingAssignment.get();
+            // An unclaimed assignment (still waiting for the user to scan the QR) is safe to return:
+            // the edge just retried pairing before the claim flow finished. A claimed assignment
+            // means the device is already paired to someone and a fresh pairing is an error.
             if (assignment.getOwnerUserId() != null) {
-                throw new IllegalStateException("Device already paired");
+                throw new IllegalStateException("Device is already paired");
             }
-
-            publishDeviceChanged(assignment, assignment.getStatus().name());
             return assignment;
         }
 
-        DeviceAssignment assignment = deviceAssignmentRepository.save(new DeviceAssignment(device, ClaimToken.generate()));
-        publishDeviceChanged(assignment, DeviceStatus.OFFLINE.name());
-        return assignment;
+        return deviceAssignmentRepository.save(new DeviceAssignment(device.getId(), ClaimToken.generate()));
     }
 
     @Override
@@ -147,17 +162,30 @@ public class DeviceCommandServiceImpl implements DeviceCommandService {
         }
 
         DeviceAssignment assignment = deviceAssignmentRepository
-            .findByClaimToken(command.claimToken())
+            .findByClaimTokenForUpdate(command.claimToken())
             .orElseThrow(() -> new IllegalArgumentException("Invalid claim token"));
 
         if (assignment.getOwnerUserId() != null && !assignment.getOwnerUserId().equals(command.userId())) {
             throw new AccessDeniedException("Device assignment belongs to another user");
         }
 
+        // Quota is enforced at the owner boundary, under a lock, before the token is consumed: a
+        // failed claim rolls back and leaves the token usable.
+
+        deviceAssignmentRepository.lockOwnerQuotaBoundary(command.userId());
+
+        long owned = deviceAssignmentRepository.countByOwnerUserId(command.userId());
+
+        int maxAllowed = externalBillingService.getMaxDevices(command.userId().userId());
+
+        if (owned >= maxAllowed) {
+            throw new IllegalStateException(
+                "Cannot claim device. User has " + owned + " devices, max allowed is " + maxAllowed);
+        }
+
+
         assignment.claimToSpace(command.spaceId(), command.userId());
-        DeviceAssignment savedAssignment = deviceAssignmentRepository.save(assignment);
-        publishDeviceChanged(savedAssignment, savedAssignment.getStatus().name());
-        return savedAssignment;
+        return deviceAssignmentRepository.save(assignment);
     }
 
     @Override
@@ -172,13 +200,20 @@ public class DeviceCommandServiceImpl implements DeviceCommandService {
         }
 
         // Reset/unlink is not a decommission. Keep the device active and cached.
-        Device device = assignment.getDevice();
+        Device device = requireDevice(assignment.getDeviceId());
         device.resetNameToFactoryDefault();
         deviceRepository.save(device);
 
-        deviceAssignmentRepository.delete(assignment);
-        // Reset/unlink is not a decommission. Keep the device cached on the edge.
-        publishDeviceChanged(device, DeviceStatus.OFFLINE.name(), "UPDATED");
+        // Whatever was queued for the old owner is void; the edge learns the same from the roster's
+        // assignment id and drops its own cached copies.
+        deviceCommandRepository.expireOutstandingByAssignmentId(assignment.getId());
+
+        deviceAssignmentRepository.deleteById(assignment.getId());
+        Instant previousWatermark = assignment.getUpdatedAt();
+        if (previousWatermark == null || device.getUpdatedAt().isAfter(previousWatermark)) {
+            previousWatermark = device.getUpdatedAt();
+        }
+        deviceRepository.advanceRosterWatermark(device.getId(), previousWatermark);
     }
 
     @Override
@@ -192,12 +227,9 @@ public class DeviceCommandServiceImpl implements DeviceCommandService {
             throw new AccessDeniedException("Device does not belong to user");
         }
 
-        Device device = assignment.getDevice();
+        Device device = requireDevice(assignment.getDeviceId());
         device.updateName(command.name());
         deviceRepository.save(device);
-
-        // Notify downstream consumers with the latest combined view.
-        publishDeviceChanged(assignment, assignment.getStatus().name());
     }
 
     @Override
@@ -223,9 +255,10 @@ public class DeviceCommandServiceImpl implements DeviceCommandService {
     @Override
     public List<Device> findBySpaceId(UUID spaceId) {
         // Never run an unbounded query; callers needing more should use the paged query API.
-        return deviceAssignmentRepository.findBySpaceId(spaceId, PageRequest.of(0, 1000))
-            .map(DeviceAssignment::getDevice)
+        var deviceIds = deviceAssignmentRepository.findBySpaceId(spaceId, 0, 1000).items().stream()
+            .map(DeviceAssignment::getDeviceId)
             .toList();
+        return deviceRepository.findAllById(deviceIds);
     }
 
     @Override
@@ -233,26 +266,8 @@ public class DeviceCommandServiceImpl implements DeviceCommandService {
         return deviceAssignmentRepository.countBySpaceId(spaceId);
     }
 
-    private void publishDeviceChanged(DeviceAssignment assignment, String status) {
-        Device device = assignment.getDevice();
-        provisioningDevicesChangedPublisher.publish(new DeviceChangedIntegrationEvent(
-                device.getId().toString(),
-                device.getHardwareId().value(),
-                device.getApiKey().value(),
-                status,
-                "UPDATED",
-                Instant.now().toString()
-        ));
-    }
-
-    private void publishDeviceChanged(Device device, String status, String changeType) {
-        provisioningDevicesChangedPublisher.publish(new DeviceChangedIntegrationEvent(
-                device.getId().toString(),
-                device.getHardwareId().value(),
-                device.getApiKey().value(),
-                status,
-                changeType,
-                Instant.now().toString()
-        ));
+    private Device requireDevice(UUID deviceId) {
+        return deviceRepository.findById(deviceId)
+            .orElseThrow(() -> new IllegalArgumentException("Device not found"));
     }
 }

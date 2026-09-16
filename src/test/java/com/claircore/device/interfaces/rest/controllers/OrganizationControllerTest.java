@@ -1,15 +1,15 @@
 package com.claircore.device.interfaces.rest.controllers;
 
-import com.claircore.device.domain.model.entities.Organization;
+import com.claircore.device.domain.model.aggregates.Organization;
 import com.claircore.device.domain.model.commands.CreateOrganizationCommand;
-import com.claircore.device.domain.model.queries.GetOrganizationByIdQuery;
+import com.claircore.device.domain.model.queries.GetOrganizationByIdForUserQuery;
 import com.claircore.device.domain.model.queries.GetOrganizationsByOwnerQuery;
 import com.claircore.device.domain.model.valueobjects.UserId;
-import com.claircore.device.domain.services.DeviceQueryService;
-import com.claircore.device.domain.services.OrganizationCommandService;
+import com.claircore.device.application.queryservices.DeviceQueryService;
+import com.claircore.device.application.commandservices.OrganizationCommandService;
 import com.claircore.device.interfaces.rest.resources.CreateOrganizationRequest;
-import com.claircore.iam.domain.services.TokenQueryService;
-import com.claircore.shared.interfaces.rest.exceptions.GlobalExceptionHandler;
+import com.claircore.iam.application.queryservices.TokenQueryService;
+import com.claircore.shared.interfaces.rest.GlobalExceptionHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +26,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.time.Instant;
 import java.util.UUID;
 import java.util.Date;
 
@@ -62,9 +63,7 @@ class OrganizationControllerTest {
     @Test
     void shouldCreateOrganizationWhenRequestIsValid() throws Exception {
         authenticate("550e8400-e29b-41d4-a716-446655446000");
-        Organization organization = new Organization("Home", new UserId(UUID.fromString("550e8400-e29b-41d4-a716-446655446000")));
-        org.springframework.test.util.ReflectionTestUtils.setField(organization.getAuditFields(), "createdAt", new Date());
-        org.springframework.test.util.ReflectionTestUtils.setField(organization.getAuditFields(), "updatedAt", new Date());
+        Organization organization = Organization.reconstitute(UUID.randomUUID(), "Home", new UserId(UUID.fromString("550e8400-e29b-41d4-a716-446655446000")), Instant.now(), Instant.now());
         when(organizationCommandService.handle(org.mockito.ArgumentMatchers.any(CreateOrganizationCommand.class))).thenReturn(organization);
 
         mockMvc.perform(post("/api/v1/organizations")
@@ -85,7 +84,8 @@ class OrganizationControllerTest {
 
     @Test
     void shouldReturnNotFoundWhenOrganizationDoesNotExist() throws Exception {
-        when(deviceQueryService.handle(org.mockito.ArgumentMatchers.any(GetOrganizationByIdQuery.class))).thenReturn(Optional.empty());
+        authenticate("550e8400-e29b-41d4-a716-446655446000");
+        when(deviceQueryService.handle(org.mockito.ArgumentMatchers.any(GetOrganizationByIdForUserQuery.class))).thenReturn(Optional.empty());
 
         mockMvc.perform(get("/api/v1/organizations/{organizationId}", UUID.randomUUID()))
                 .andExpect(status().isNotFound());
@@ -94,14 +94,18 @@ class OrganizationControllerTest {
     @Test
     void shouldReturnOrganizationsWhenUserHasAny() throws Exception {
         authenticate("550e8400-e29b-41d4-a716-446655446000");
-        Organization organization = new Organization("Home", new UserId(UUID.fromString("550e8400-e29b-41d4-a716-446655446000")));
-        org.springframework.test.util.ReflectionTestUtils.setField(organization.getAuditFields(), "createdAt", new Date());
-        org.springframework.test.util.ReflectionTestUtils.setField(organization.getAuditFields(), "updatedAt", new Date());
+        Organization organization = Organization.reconstitute(UUID.randomUUID(), "Home", new UserId(UUID.fromString("550e8400-e29b-41d4-a716-446655446000")), Instant.now(), Instant.now());
         when(deviceQueryService.handle(org.mockito.ArgumentMatchers.any(GetOrganizationsByOwnerQuery.class))).thenReturn(List.of(organization));
 
         mockMvc.perform(get("/api/v1/organizations"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].name").value("Home"));
+    }
+
+    @Test
+    void readByIdIsRefusedWithoutAuthentication() throws Exception {
+        mockMvc.perform(get("/api/v1/organizations/{organizationId}", UUID.randomUUID())).andExpect(status().isForbidden());
+        org.mockito.Mockito.verifyNoInteractions(deviceQueryService);
     }
 
     private void authenticate(String userId) {

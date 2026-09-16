@@ -1,38 +1,22 @@
 package com.claircore.billing.application.acl;
 
-import com.claircore.billing.domain.model.aggregates.UserPlan;
 import com.claircore.billing.domain.model.valueobjects.PlanType;
-import com.claircore.billing.domain.model.valueobjects.UserId;
 import com.claircore.billing.interfaces.acl.BillingContextFacade;
-import com.claircore.billing.infrastructure.persistence.jpa.repositories.UserPlanRepository;
 import org.springframework.stereotype.Service;
 
-import java.util.Optional;
 import java.util.UUID;
 
 @Service
 public class BillingContextFacadeImpl implements BillingContextFacade {
 
-    private final UserPlanRepository userPlanRepository;
+    private final com.claircore.billing.application.queryservices.SubscriptionQueryService queryService;
 
-    public BillingContextFacadeImpl(UserPlanRepository userPlanRepository) {
-        this.userPlanRepository = userPlanRepository;
+    public BillingContextFacadeImpl(com.claircore.billing.application.queryservices.SubscriptionQueryService queryService) {
+        this.queryService = queryService;
     }
 
-    private PlanType resolveUserPlanType(UUID userId) {
-        return userPlanRepository.findByUserId(new UserId(userId))
-                .map(UserPlan::getPlanType)
-                .orElse(PlanType.FREEMIUM);
-    }
-
-    /**
-     * Effective plan after honouring premium expiry. An expired premium plan is
-     * treated as freemium for entitlement decisions (paid features must lock back).
-     */
     private PlanType resolveEffectivePlanType(UUID userId) {
-        return userPlanRepository.findByUserId(new UserId(userId))
-                .map(plan -> plan.isPremiumExpired() ? PlanType.FREEMIUM : plan.getPlanType())
-                .orElse(PlanType.FREEMIUM);
+        return queryService.resolveEffectivePlan(new com.claircore.billing.domain.model.queries.GetUserPlanQuery(userId.toString()));
     }
 
     @Override

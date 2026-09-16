@@ -1,13 +1,7 @@
 package com.claircore.analytics.domain.model.valueobjects;
 
-import jakarta.persistence.Embeddable;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-
-@Embeddable
 public record AirQualityIndex(
         Integer value,
-        @Enumerated(EnumType.STRING)
         AqiCategory category
 ) {
     public AirQualityIndex {

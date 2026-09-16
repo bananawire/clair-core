@@ -22,7 +22,7 @@ class AirQualityTest {
         // Arrange, Act & Assert
         assertThatThrownBy(() -> new AirQuality(null, 23.5, 50.0))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("co2 must not be null");
+                .hasMessageContaining("co2 must be finite");
     }
 
     @Test
@@ -30,7 +30,7 @@ class AirQualityTest {
         // Arrange, Act & Assert
         assertThatThrownBy(() -> new AirQuality(450.0, null, 50.0))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("temperature must not be null");
+                .hasMessageContaining("temperature must be finite");
     }
 
     @Test
@@ -38,6 +38,12 @@ class AirQualityTest {
         // Arrange, Act & Assert
         assertThatThrownBy(() -> new AirQuality(450.0, 23.5, null))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("humidity must not be null");
+                .hasMessageContaining("humidity must be finite");
+    }
+    @Test void rejectsBrokenSensorValues() {
+        for (double value : new double[]{-1, 1000001, Double.NaN, Double.POSITIVE_INFINITY})
+            assertThatThrownBy(() -> new AirQuality(value, 22.0, 50.0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new AirQuality(400.0, 9999.0, 50.0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new AirQuality(400.0, 22.0, 101.0)).isInstanceOf(IllegalArgumentException.class);
     }
 }

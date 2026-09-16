@@ -3,7 +3,7 @@ package com.claircore.billing.interfaces.rest.controllers;
 import com.claircore.billing.domain.model.commands.FulfillSubscriptionCommand;
 import com.claircore.billing.domain.model.valueobjects.Money;
 import com.claircore.billing.domain.model.valueobjects.UserId;
-import com.claircore.billing.domain.services.SubscriptionCommandService;
+import com.claircore.billing.application.commandservices.SubscriptionCommandService;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.model.Event;
 import com.stripe.model.PaymentIntent;

@@ -2,12 +2,12 @@ package com.claircore.device.application.internal.commandservices;
 
 import com.claircore.device.domain.model.commands.RemoveDeviceThresholdCommand;
 import com.claircore.device.domain.model.commands.WriteDeviceThresholdCommand;
-import com.claircore.device.domain.model.entities.DeviceAssignment;
+import com.claircore.device.domain.model.aggregates.DeviceAssignment;
 import com.claircore.device.domain.model.valueobjects.DeviceMetricThresholdConfiguration;
 import com.claircore.device.domain.model.valueobjects.MetricThreshold;
 import com.claircore.device.domain.model.valueobjects.UserId;
-import com.claircore.device.domain.services.DeviceThresholdCommandService;
-import com.claircore.device.infrastructure.persistence.jpa.repositories.DeviceAssignmentRepository;
+import com.claircore.device.application.commandservices.DeviceThresholdCommandService;
+import com.claircore.device.domain.repositories.DeviceAssignmentRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.security.access.AccessDeniedException;

@@ -1,31 +1,31 @@
 package com.claircore.alerting.interfaces.rest.controllers;
 
-import com.claircore.alerting.domain.model.entities.Alert;
+import com.claircore.alerting.application.internal.outboundservices.acl.ExternalAlertingDeviceService;
+import com.claircore.alerting.application.queryservices.AlertQueryService;
+import com.claircore.alerting.domain.model.aggregates.Alert;
 import com.claircore.alerting.domain.model.queries.GetAlertsByDeviceQuery;
 import com.claircore.alerting.domain.model.queries.GetAlertsByOwnerQuery;
 import com.claircore.alerting.domain.model.queries.GetAlertsBySpaceQuery;
 import com.claircore.alerting.domain.model.valueobjects.AlertStatus;
-import com.claircore.alerting.domain.services.AlertQueryService;
 import com.claircore.alerting.interfaces.rest.resources.AlertResponse;
 import com.claircore.alerting.interfaces.rest.resources.DailyAlertSummaryResource;
-import com.claircore.alerting.application.internal.outboundservices.acl.ExternalAlertingDeviceService;
-import com.claircore.iam.infrastructure.tokens.jwt.JwtAuthenticationFilter;
+import com.claircore.shared.domain.model.PageResult;
+import com.claircore.shared.interfaces.rest.security.CurrentUserId;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Objects;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 @RestController
@@ -50,17 +50,15 @@ public class AlertController {
             @ApiResponse(responseCode = "401", description = "Authentication required")
     })
     public ResponseEntity<Page<AlertResponse>> getCurrentUserAlerts(
-            HttpServletRequest httpRequest,
+            @CurrentUserId UUID userId,
             @Parameter(description = "Page number (default: 0)") @RequestParam(defaultValue = "0") Integer page,
             @Parameter(description = "Page size (default: 20)") @RequestParam(defaultValue = "20") Integer size,
             @Parameter(description = "Filter by status (e.g., ACTIVE, ACKNOWLEDGED, RESOLVED)") @RequestParam(required = false) List<AlertStatus> status) {
 
-        UUID userId = (UUID) httpRequest.getAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE);
         List<UUID> ownerDeviceIds = externalDeviceService.fetchDeviceIdsByOwnerId(userId);
 
-        var pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "occurredAt"));
-        var query = new GetAlertsByOwnerQuery(userId, pageable);
-        Page<Alert> alerts = (status != null && !status.isEmpty())
+        var query = new GetAlertsByOwnerQuery(userId, page, size);
+        PageResult<Alert> alerts = (status != null && !status.isEmpty())
                 ? alertQueryService.fetchByOwnerAndStatus(query, ownerDeviceIds, status)
                 : alertQueryService.fetchByOwner(query, ownerDeviceIds);
 
@@ -74,10 +72,9 @@ public class AlertController {
             @ApiResponse(responseCode = "401", description = "Authentication required")
     })
     public ResponseEntity<List<DailyAlertSummaryResource>> getCurrentUserDailyAlertSummary(
-            HttpServletRequest httpRequest,
+            @CurrentUserId UUID userId,
             @Parameter(description = "Number of days (default: 30)") @RequestParam(defaultValue = "30") Integer days) {
 
-        UUID userId = (UUID) httpRequest.getAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE);
         List<UUID> ownerDeviceIds = externalDeviceService.fetchDeviceIdsByOwnerId(userId);
 
         var summary = alertQueryService.fetchDailySummaryByOwner(userId, ownerDeviceIds, days);
@@ -96,21 +93,18 @@ public class AlertController {
             @ApiResponse(responseCode = "404", description = "Device not found")
     })
     public ResponseEntity<Page<AlertResponse>> getAlertsByDevice(
-            HttpServletRequest httpRequest,
+            @CurrentUserId UUID userId,
             @Parameter(description = "Device ID") @PathVariable UUID deviceId,
             @Parameter(description = "Page number (default: 0)") @RequestParam(defaultValue = "0") Integer page,
             @Parameter(description = "Page size (default: 20)") @RequestParam(defaultValue = "20") Integer size,
             @Parameter(description = "Filter by status (e.g., ACTIVE, ACKNOWLEDGED, RESOLVED)") @RequestParam(required = false) List<AlertStatus> status) {
 
-        UUID userId = (UUID) httpRequest.getAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE);
-
         if (!externalDeviceService.verifyDeviceOwnership(deviceId, userId)) {
             throw new AccessDeniedException("Device does not belong to user");
         }
 
-        var pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "occurredAt"));
-        var query = new GetAlertsByDeviceQuery(deviceId, pageable);
-        Page<Alert> alerts = (status != null && !status.isEmpty())
+        var query = new GetAlertsByDeviceQuery(deviceId, page, size);
+        PageResult<Alert> alerts = (status != null && !status.isEmpty())
                 ? alertQueryService.fetchByDeviceAndStatus(query, status)
                 : alertQueryService.fetchByDevice(query);
 
@@ -125,21 +119,18 @@ public class AlertController {
             @ApiResponse(responseCode = "404", description = "Space not found")
     })
     public ResponseEntity<Page<AlertResponse>> getAlertsBySpace(
-            HttpServletRequest httpRequest,
+            @CurrentUserId UUID userId,
             @Parameter(description = "Space ID") @PathVariable UUID spaceId,
             @Parameter(description = "Page number (default: 0)") @RequestParam(defaultValue = "0") Integer page,
             @Parameter(description = "Page size (default: 20)") @RequestParam(defaultValue = "20") Integer size,
             @Parameter(description = "Filter by status (e.g., ACTIVE, ACKNOWLEDGED, RESOLVED)") @RequestParam(required = false) List<AlertStatus> status) {
 
-        UUID userId = (UUID) httpRequest.getAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE);
-
         if (!externalDeviceService.verifySpaceOwnership(spaceId, userId)) {
             throw new AccessDeniedException("Space does not belong to user");
         }
 
-        var pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "occurredAt"));
-        var query = new GetAlertsBySpaceQuery(spaceId, pageable);
-        Page<Alert> alerts = (status != null && !status.isEmpty())
+        var query = new GetAlertsBySpaceQuery(spaceId, page, size);
+        PageResult<Alert> alerts = (status != null && !status.isEmpty())
                 ? alertQueryService.fetchBySpaceAndStatus(query, status)
                 : alertQueryService.fetchBySpace(query);
 
@@ -153,11 +144,9 @@ public class AlertController {
             @ApiResponse(responseCode = "403", description = "Space does not belong to user")
     })
     public ResponseEntity<List<DailyAlertSummaryResource>> getDailyAlertSummary(
-            HttpServletRequest httpRequest,
+            @CurrentUserId UUID userId,
             @Parameter(description = "Space ID") @PathVariable UUID spaceId,
             @Parameter(description = "Number of days (default: 30)") @RequestParam(defaultValue = "30") Integer days) {
-
-        UUID userId = (UUID) httpRequest.getAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE);
 
         if (!externalDeviceService.verifySpaceOwnership(spaceId, userId)) {
             throw new AccessDeniedException("Space does not belong to user");
@@ -171,18 +160,22 @@ public class AlertController {
         return ResponseEntity.ok(resources);
     }
 
-    private Page<AlertResponse> toResponsePage(Page<Alert> alerts) {
+    /**
+     * The port speaks {@link PageResult}; the response envelope stays a Spring Data page because
+     * {@code content} / {@code totalElements} is a published contract, not an implementation detail.
+     */
+    private Page<AlertResponse> toResponsePage(PageResult<Alert> alerts) {
         Map<UUID, String> deviceNames = externalDeviceService.fetchDeviceNamesByDeviceIds(
-                alerts.getContent().stream().map(Alert::getDeviceId).distinct().toList()
+                alerts.items().stream().map(Alert::getDeviceId).distinct().toList()
         );
         Map<UUID, String> spaceNames = externalDeviceService.fetchSpaceNamesBySpaceIds(
-                alerts.getContent().stream().map(Alert::getSpaceId).filter(Objects::nonNull).distinct().toList()
+                alerts.items().stream().map(Alert::getSpaceId).filter(Objects::nonNull).distinct().toList()
         );
 
-        return alerts.map(a -> AlertResponse.from(
-                a,
-                spaceNames.get(a.getSpaceId()),
-                deviceNames.get(a.getDeviceId())
-        ));
+        var responses = alerts.items().stream()
+                .map(a -> AlertResponse.from(a, spaceNames.get(a.getSpaceId()), deviceNames.get(a.getDeviceId())))
+                .toList();
+
+        return new PageImpl<>(responses, PageRequest.of(alerts.page(), alerts.size()), alerts.total());
     }
 }

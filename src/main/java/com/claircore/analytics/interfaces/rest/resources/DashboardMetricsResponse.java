@@ -6,10 +6,10 @@ import java.time.Instant;
 
 @Schema(description = "Live KPI dashboard metrics for a device")
 public record DashboardMetricsResponse(
-        @Schema(description = "Current AQI value", example = "75")
+        @Schema(description = "Indicative PM2.5 index of mean concentration (0–500 display cap)", example = "75")
         Integer aqiValue,
 
-        @Schema(description = "Current AQI risk category", example = "MODERATE")
+        @Schema(description = "PM2.5 index category", example = "MODERATE")
         String aqiCategory,
 
         @Schema(description = "Moving average CO2 in ppm", example = "450.0")
@@ -36,7 +36,10 @@ public record DashboardMetricsResponse(
         @Schema(description = "Humidity trend delta percentage", example = "-1.3")
         Double humidityDeltaPercentage,
 
-        @Schema(description = "When metrics were calculated", example = "2026-05-23T10:00:00Z")
+        @Schema(description = "Latest measurement time for live results; calculation time for historical results", example = "2026-05-23T10:00:00Z")
         Instant calculatedAt
 ) {
+    @com.fasterxml.jackson.annotation.JsonProperty("indexLabel")
+    public String indexLabel() { return "Indicative PM2.5 index (EPA breakpoints; not NowCast)"; }
+
 }

@@ -3,12 +3,12 @@ package com.claircore.device.interfaces.rest.controllers;
 import com.claircore.device.domain.model.commands.CreateSpaceCommand;
 import com.claircore.device.domain.model.commands.DeleteSpaceCommand;
 import com.claircore.device.domain.model.commands.UpdateSpaceNameCommand;
-import com.claircore.device.domain.model.entities.Space;
+import com.claircore.device.domain.model.aggregates.Space;
+import com.claircore.device.domain.model.queries.GetSpaceByIdForUserQuery;
+import com.claircore.device.domain.model.queries.GetSpacesByOrganizationForUserQuery;
 import com.claircore.device.domain.model.valueobjects.UserId;
-import com.claircore.device.domain.services.SpaceCommandService;
-import com.claircore.device.domain.services.DeviceQueryService;
-import com.claircore.device.domain.model.queries.GetSpaceByIdQuery;
-import com.claircore.device.domain.model.queries.GetSpacesByOrganizationQuery;
+import com.claircore.device.application.commandservices.SpaceCommandService;
+import com.claircore.device.application.queryservices.DeviceQueryService;
 import com.claircore.device.interfaces.rest.resources.CreateSpaceRequest;
 import com.claircore.device.interfaces.rest.resources.SpaceResponse;
 import com.claircore.device.interfaces.rest.resources.UpdateSpaceNameRequest;
@@ -57,7 +57,7 @@ public class SpaceController {
     @GetMapping("/{spaceId}")
     @Operation(summary = "Get space by ID")
     public ResponseEntity<SpaceResponse> getSpace(@PathVariable UUID spaceId) {
-        var query = new GetSpaceByIdQuery(spaceId);
+        var query = new GetSpaceByIdForUserQuery(spaceId, new UserId(getAuthenticatedUserId()));
         return deviceQueryService.handle(query)
             .map(space -> ResponseEntity.ok(toResponse(space)))
             .orElse(ResponseEntity.notFound().build());
@@ -66,7 +66,7 @@ public class SpaceController {
     @GetMapping
     @Operation(summary = "Get spaces by organization")
     public ResponseEntity<List<SpaceResponse>> getSpacesByOrganization(@RequestParam UUID organizationId) {
-        var query = new GetSpacesByOrganizationQuery(organizationId);
+        var query = new GetSpacesByOrganizationForUserQuery(organizationId, new UserId(getAuthenticatedUserId()));
         List<Space> spaces = deviceQueryService.handle(query);
         return ResponseEntity.ok(spaces.stream().map(this::toResponse).toList());
     }
@@ -79,7 +79,7 @@ public class SpaceController {
         @ApiResponse(responseCode = "409", description = "Space has registered devices", content = @Content)
     })
     public ResponseEntity<Void> deleteSpace(@PathVariable UUID spaceId) {
-        spaceCommandService.handle(new DeleteSpaceCommand(spaceId));
+        spaceCommandService.handle(new DeleteSpaceCommand(spaceId, new UserId(getAuthenticatedUserId())));
         return ResponseEntity.noContent().build();
     }
 
@@ -89,7 +89,7 @@ public class SpaceController {
             @PathVariable UUID spaceId,
             @RequestBody UpdateSpaceNameRequest request) {
 
-        spaceCommandService.handle(new UpdateSpaceNameCommand(spaceId, request.name()));
+        spaceCommandService.handle(new UpdateSpaceNameCommand(spaceId, request.name(), new UserId(getAuthenticatedUserId())));
         return ResponseEntity.ok().build();
     }
 
@@ -107,8 +107,8 @@ public class SpaceController {
             space.getName(),
             space.getOrganizationId(),
             space.getOwnerUserId().userId(),
-            space.getAuditFields().getCreatedAt().toInstant(),
-            space.getAuditFields().getUpdatedAt().toInstant()
+            space.getCreatedAt(),
+            space.getUpdatedAt()
         );
     }
 }

@@ -1,16 +1,16 @@
 package com.claircore.device.interfaces.rest.controllers;
 
-import com.claircore.device.domain.model.entities.Device;
-import com.claircore.device.domain.model.entities.DeviceCommand;
+import com.claircore.device.domain.model.aggregates.Device;
+import com.claircore.device.domain.model.aggregates.DeviceCommand;
 import com.claircore.device.domain.model.commands.CreateDeviceCommandCommand;
 import com.claircore.device.domain.model.queries.GetDeviceCommandByIdForUserQuery;
 import com.claircore.device.domain.model.queries.GetLatestDeviceCommandByDeviceForUserQuery;
 import com.claircore.device.domain.model.valueobjects.*;
-import com.claircore.device.domain.services.DeviceCommandQueryService;
-import com.claircore.device.domain.services.DeviceControlCommandService;
+import com.claircore.device.application.queryservices.DeviceCommandQueryService;
+import com.claircore.device.application.commandservices.DeviceControlCommandService;
 import com.claircore.device.interfaces.rest.resources.CreateDeviceCommandRequest;
-import com.claircore.iam.domain.services.TokenQueryService;
-import com.claircore.shared.interfaces.rest.exceptions.GlobalExceptionHandler;
+import com.claircore.iam.application.queryservices.TokenQueryService;
+import com.claircore.shared.interfaces.rest.GlobalExceptionHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,7 +65,7 @@ class DeviceCommandControllerTest {
         DeviceCommand command = command();
         when(deviceControlCommandService.handle(org.mockito.ArgumentMatchers.any(CreateDeviceCommandCommand.class))).thenReturn(command);
 
-        mockMvc.perform(post("/api/v1/devices/{deviceId}/commands", command.getDevice().getId())
+        mockMvc.perform(post("/api/v1/devices/{deviceId}/commands", command.getDeviceId())
                         .contentType("application/json")
                         .content(objectMapper.writeValueAsString(new CreateDeviceCommandRequest(DeviceCommandType.WAKE, "{}"))))
                 .andExpect(status().isCreated())
@@ -89,7 +89,7 @@ class DeviceCommandControllerTest {
         DeviceCommand command = command();
         when(deviceCommandQueryService.handle(org.mockito.ArgumentMatchers.any(GetLatestDeviceCommandByDeviceForUserQuery.class))).thenReturn(Optional.of(command));
 
-        mockMvc.perform(get("/api/v1/devices/{deviceId}/commands/latest", command.getDevice().getId()))
+        mockMvc.perform(get("/api/v1/devices/{deviceId}/commands/latest", command.getDeviceId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PENDING"));
     }
@@ -106,7 +106,7 @@ class DeviceCommandControllerTest {
     private DeviceCommand command() {
         Device device = new Device("SN-2000", "Sensor 2000", new HardwareId("CLAIR-0KBG"), ApiKey.generate(), new DeviceType("air-quality-v1"));
         org.springframework.test.util.ReflectionTestUtils.setField(device, "id", UUID.fromString("550e8400-e29b-41d4-a716-446655443001"));
-        DeviceCommand command = new DeviceCommand(device, DeviceCommandType.WAKE, "{}");
+        DeviceCommand command = new DeviceCommand(device.getId(), DeviceCommandType.WAKE, "{}");
         org.springframework.test.util.ReflectionTestUtils.setField(command, "id", UUID.fromString("550e8400-e29b-41d4-a716-446655443002"));
         return command;
     }

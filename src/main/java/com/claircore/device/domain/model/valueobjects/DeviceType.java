@@ -1,8 +1,5 @@
 package com.claircore.device.domain.model.valueobjects;
 
-import jakarta.persistence.Embeddable;
-
-@Embeddable
 public record DeviceType(String value) {
     public DeviceType {
         if (value == null || value.isBlank()) {

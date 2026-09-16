@@ -7,12 +7,19 @@ import com.claircore.device.domain.model.queries.GetSpaceByIdQuery;
 import com.claircore.device.domain.model.queries.GetOrganizationsByOwnerQuery;
 import com.claircore.device.domain.model.queries.GetSpacesByOrganizationQuery;
 import com.claircore.device.domain.model.queries.GetDevicesBySpaceQuery;
+import com.claircore.device.domain.model.queries.GetDevicesForTelemetryQuery;
 import com.claircore.device.domain.model.valueobjects.UserId;
-import com.claircore.device.domain.model.entities.DeviceAssignment;
-import com.claircore.device.domain.services.DeviceQueryService;
+import com.claircore.device.domain.model.aggregates.DeviceAssignment;
+import com.claircore.device.application.queryservices.DeviceQueryService;
+import com.claircore.device.application.queryservices.DeviceCommandQueryService;
+import com.claircore.device.application.commandservices.DeviceControlCommandService;
+import com.claircore.device.domain.model.commands.AcknowledgeDeviceCommandCommand;
+import com.claircore.device.domain.model.valueobjects.DeviceCommandStatus;
 import com.claircore.device.interfaces.acl.DeviceContextFacade;
 import com.claircore.device.interfaces.acl.OrganizationSummary;
 import com.claircore.device.interfaces.acl.SpaceSummary;
+import com.claircore.device.interfaces.acl.DeviceTelemetryTarget;
+import com.claircore.device.interfaces.acl.DeviceCommandForEdge;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -24,9 +31,20 @@ import java.util.UUID;
 public class DeviceContextFacadeImpl implements DeviceContextFacade {
 
     private final DeviceQueryService deviceQueryService;
+    private final DeviceCommandQueryService deviceCommandQueryService;
+    private final DeviceControlCommandService deviceControlCommandService;
 
     public DeviceContextFacadeImpl(DeviceQueryService deviceQueryService) {
+        this(deviceQueryService, null, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DeviceContextFacadeImpl(DeviceQueryService deviceQueryService,
+                                   DeviceCommandQueryService deviceCommandQueryService,
+                                   DeviceControlCommandService deviceControlCommandService) {
         this.deviceQueryService = deviceQueryService;
+        this.deviceCommandQueryService = deviceCommandQueryService;
+        this.deviceControlCommandService = deviceControlCommandService;
     }
 
     @Override
@@ -58,6 +76,11 @@ public class DeviceContextFacadeImpl implements DeviceContextFacade {
     @Override
     public boolean isDeviceOwnedByUser(UUID deviceId, UUID userId) {
         return deviceQueryService.isDeviceOwnedByUser(deviceId, userId);
+    }
+
+    @Override
+    public Optional<java.time.Instant> findVisibleSinceByDeviceId(UUID deviceId) {
+        return deviceQueryService.findActivatedAtByDeviceId(deviceId);
     }
 
     @Override
@@ -101,6 +124,11 @@ public class DeviceContextFacadeImpl implements DeviceContextFacade {
     }
 
     @Override
+    public Map<UUID, String> findHardwareIdsByDeviceIds(List<UUID> deviceIds) {
+        return deviceQueryService.findHardwareIdsByDeviceIds(deviceIds);
+    }
+
+    @Override
     public List<OrganizationSummary> findOrganizationsByOwnerId(UUID ownerUserId) {
         var query = new GetOrganizationsByOwnerQuery(new UserId(ownerUserId));
         return deviceQueryService.handle(query)
@@ -121,10 +149,62 @@ public class DeviceContextFacadeImpl implements DeviceContextFacade {
     @Override
     public List<UUID> findDeviceIdsBySpaceId(UUID spaceId, int limit) {
         int size = limit > 0 ? limit : 200;
-        var page = deviceQueryService.handle(new GetDevicesBySpaceQuery(spaceId, 0, size));
-        return page.getContent().stream()
-                .map(DeviceAssignment::getDevice)
-                .map(d -> d.getId())
+        return deviceQueryService.handle(new GetDevicesBySpaceQuery(spaceId, 0, size)).items().stream()
+                .map(assigned -> assigned.device().getId())
                 .toList();
+    }
+
+    @Override
+    public List<DeviceTelemetryTarget> findTelemetryTargets(int limit, boolean includeDeleted) {
+        int size = limit > 0 ? Math.min(limit, 500) : 50;
+        var page = deviceQueryService.handle(new GetDevicesForTelemetryQuery(size, includeDeleted));
+        return page.items().stream().map(device -> {
+            var assignment = deviceQueryService.findAssignmentByDeviceId(device.getId());
+            return new DeviceTelemetryTarget(device.getId(), device.getHardwareId().value(),
+                    device.getName(), assignment.isPresent(),
+                    assignment.map(DeviceAssignment::getStatus).map(status -> status.name()).orElse(null));
+        }).toList();
+    }
+
+    @Override
+    public List<DeviceCommandForEdge> findClaimableCommands(java.time.Instant leaseCutoff, int limit) {
+        return deviceCommandQueryService.findClaimableForEdge(leaseCutoff, limit).stream()
+                .map(DeviceContextFacadeImpl::toEdgeCommand).toList();
+    }
+
+    @Override
+    public Optional<DeviceCommandForEdge> claimCommand(UUID commandId, java.time.Instant leaseCutoff,
+                                                        java.time.Instant claimedAt) {
+        return deviceControlCommandService.claimForEdge(commandId, leaseCutoff, claimedAt)
+                .map(DeviceContextFacadeImpl::toEdgeCommand);
+    }
+
+    @Override
+    public Optional<DeviceCommandForEdge> acknowledgeCommand(UUID deviceId, UUID commandId,
+                                                               String status, String failureReason) {
+        DeviceCommandStatus parsed;
+        try { parsed = DeviceCommandStatus.valueOf(status); }
+        catch (IllegalArgumentException | NullPointerException ex) {
+            throw new IllegalArgumentException("Unknown command ACK status: " + status, ex);
+        }
+        return Optional.of(toEdgeCommand(deviceControlCommandService.handle(
+                new AcknowledgeDeviceCommandCommand(deviceId, commandId, parsed, failureReason))));
+    }
+
+    private static DeviceCommandForEdge toEdgeCommand(com.claircore.device.domain.model.aggregates.DeviceCommand command) {
+        return new DeviceCommandForEdge(command.getId(), command.getDeviceId(), command.getAssignmentId(),
+                command.getType().name(), command.getPayload(), command.getSentAt());
+    }
+
+    @Override
+    public void recordDevicePresence(UUID deviceId, String status, java.time.Instant occurredAt) {
+        com.claircore.device.domain.model.valueobjects.DeviceStatus parsed;
+        try {
+            parsed = com.claircore.device.domain.model.valueobjects.DeviceStatus.valueOf(status);
+        } catch (IllegalArgumentException | NullPointerException ex) {
+            throw new IllegalArgumentException("Unknown device status: " + status, ex);
+        }
+        java.time.Instant occurred = occurredAt != null ? occurredAt : java.time.Instant.now();
+        deviceQueryService.updatePresence(deviceId, parsed, occurred);
     }
 }

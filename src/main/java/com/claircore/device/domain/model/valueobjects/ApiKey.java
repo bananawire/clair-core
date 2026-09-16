@@ -1,11 +1,9 @@
 package com.claircore.device.domain.model.valueobjects;
 
-import jakarta.persistence.Embeddable;
 
 import java.security.SecureRandom;
 import java.util.Base64;
 
-@Embeddable
 public record ApiKey(String value) {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();

@@ -1,6 +1,6 @@
 package com.claircore.billing.application.internal.commandservices;
 
-import com.claircore.billing.domain.gateways.PaymentGateway;
+import com.claircore.billing.application.internal.outboundservices.payments.PaymentGateway;
 import com.claircore.billing.domain.model.aggregates.PaymentRecord;
 import com.claircore.billing.domain.model.commands.CreatePaymentIntentCommand;
 import com.claircore.billing.domain.model.commands.FulfillSubscriptionCommand;
@@ -8,8 +8,8 @@ import com.claircore.billing.domain.model.valueobjects.Money;
 import com.claircore.billing.domain.model.valueobjects.PaymentIntentResult;
 import com.claircore.billing.domain.model.valueobjects.PaymentStatus;
 import com.claircore.billing.domain.model.valueobjects.UserId;
-import com.claircore.billing.infrastructure.persistence.jpa.repositories.PaymentRecordRepository;
-import com.claircore.billing.infrastructure.persistence.jpa.repositories.UserPlanRepository;
+import com.claircore.billing.domain.repositories.PaymentRecordRepository;
+import com.claircore.billing.domain.repositories.UserPlanRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;

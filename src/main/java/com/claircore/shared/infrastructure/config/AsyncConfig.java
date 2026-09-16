@@ -7,8 +7,14 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.concurrent.Executor;
 
+/**
+ * Async executors for the monolith.
+ *
+ * <p>The {@code edgeNotifierExecutor} used to be its own bounded pool so the edge webhook could
+ * never stall a request thread; that integration is gone and so is the bean.
+ */
 @Configuration
-@EnableAsync
+@EnableAsync(proxyTargetClass = true)
 public class AsyncConfig {
 
     @Bean(name = "taskExecutor")

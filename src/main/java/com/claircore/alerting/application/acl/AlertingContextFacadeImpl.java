@@ -1,66 +1,61 @@
 package com.claircore.alerting.application.acl;
 
-import com.claircore.alerting.application.internal.outboundservices.acl.ExternalAlertingDeviceService;
-import com.claircore.alerting.domain.model.entities.Alert;
+import com.claircore.alerting.domain.model.aggregates.Alert;
 import com.claircore.alerting.domain.model.valueobjects.AlertStatus;
-import com.claircore.alerting.infrastructure.persistence.jpa.repositories.AlertRepository;
 import com.claircore.alerting.interfaces.acl.AlertDetails;
 import com.claircore.alerting.interfaces.acl.AlertingContextFacade;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 
 @Service
 public class AlertingContextFacadeImpl implements AlertingContextFacade {
 
-    private final AlertRepository alertRepository;
-    private final ExternalAlertingDeviceService externalDeviceService;
+    private final com.claircore.alerting.application.queryservices.AlertQueryService queryService;
 
-    public AlertingContextFacadeImpl(
-            AlertRepository alertRepository,
-            ExternalAlertingDeviceService externalDeviceService
-    ) {
-        this.alertRepository = alertRepository;
-        this.externalDeviceService = externalDeviceService;
+    public AlertingContextFacadeImpl(com.claircore.alerting.application.queryservices.AlertQueryService queryService) {
+        this.queryService = queryService;
     }
 
     @Override
-    @Transactional(readOnly = true)
     public List<AlertDetails> getActiveAlertsByDeviceId(UUID deviceId) {
-        List<Alert> activeAlerts = alertRepository.findByDeviceIdAndStatus(deviceId, AlertStatus.ACTIVE);
-        return activeAlerts.stream().map(this::toDto).toList();
+        return queryService.findActiveByDeviceId(deviceId).stream()
+                .map(AlertingContextFacadeImpl::toDto)
+                .toList();
     }
 
     @Override
-    @Transactional(readOnly = true)
     public Optional<AlertDetails> getAlertDetailsById(UUID alertId) {
-        return alertRepository.findById(alertId).map(this::toDto);
+        return queryService.findById(alertId).map(AlertingContextFacadeImpl::toDto);
     }
 
     @Override
-    @Transactional(readOnly = true)
-    public List<AlertDetails> getRecentAlertsByOwnerId(UUID ownerUserId, List<AlertStatus> statuses, int limit) {
-        if (ownerUserId == null) return List.of();
-        int size = Math.max(0, limit);
-        if (size == 0) return List.of();
-
-        List<UUID> ownerDeviceIds = externalDeviceService.fetchDeviceIdsByOwnerId(ownerUserId);
-        if (ownerDeviceIds == null || ownerDeviceIds.isEmpty()) return List.of();
-
-        var pageable = PageRequest.of(0, size, Sort.by(Sort.Direction.DESC, "occurredAt"));
-        var page = (statuses != null && !statuses.isEmpty())
-                ? alertRepository.findByDeviceIdInAndStatusIn(ownerDeviceIds, statuses, pageable)
-                : alertRepository.findByDeviceIdIn(ownerDeviceIds, pageable);
-
-        return page.getContent().stream().map(this::toDto).toList();
+    public List<AlertDetails> getRecentAlertsByOwnerId(UUID ownerUserId, List<String> statuses, int limit) {
+        return queryService.findRecentByOwnerId(ownerUserId, parseStatuses(statuses), limit)
+                .stream().map(AlertingContextFacadeImpl::toDto).toList();
     }
 
-    private AlertDetails toDto(Alert alert) {
+    /** An unrecognised name is dropped rather than throwing: the caller is another context. */
+    private static List<AlertStatus> parseStatuses(List<String> statuses) {
+        if (statuses == null) return List.of();
+        return statuses.stream()
+                .map(AlertingContextFacadeImpl::parseStatus)
+                .flatMap(Optional::stream)
+                .toList();
+    }
+
+    private static Optional<AlertStatus> parseStatus(String name) {
+        if (name == null || name.isBlank()) return Optional.empty();
+        try {
+            return Optional.of(AlertStatus.valueOf(name));
+        } catch (IllegalArgumentException ignored) {
+            return Optional.empty();
+        }
+    }
+
+    private static AlertDetails toDto(Alert alert) {
         return new AlertDetails(
                 alert.getId(),
                 alert.getDeviceId(),

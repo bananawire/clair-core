@@ -2,12 +2,12 @@ package com.claircore.notifications.application.internal.commandservices;
 
 import com.claircore.notifications.domain.model.commands.SendVerificationCodeCommand;
 import com.claircore.notifications.domain.model.commands.SendWelcomeEmailCommand;
-import com.claircore.notifications.domain.model.entities.EmailLog;
+import com.claircore.notifications.domain.model.aggregates.EmailLog;
 import com.claircore.notifications.domain.model.valueobjects.EmailContent;
 import com.claircore.notifications.domain.model.valueobjects.EmailRecipient;
 import com.claircore.notifications.domain.model.valueobjects.EmailSubject;
-import com.claircore.notifications.domain.repositories.EmailLogPersistence;
-import com.claircore.notifications.domain.services.EmailDeliveryService;
+import com.claircore.notifications.domain.repositories.EmailLogRepository;
+import com.claircore.notifications.application.internal.outboundservices.email.EmailDeliveryService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -28,7 +28,7 @@ class EmailCommandServiceImplTest {
     private EmailDeliveryService emailDeliveryService;
 
     @Mock
-    private EmailLogPersistence emailLogPersistence;
+    private EmailLogRepository emailLogRepository;
 
     @InjectMocks
     private EmailCommandServiceImpl service;
@@ -39,7 +39,7 @@ class EmailCommandServiceImplTest {
 
         ArgumentCaptor<EmailLog> captor = ArgumentCaptor.forClass(EmailLog.class);
         verify(emailDeliveryService).sendEmail(any(EmailRecipient.class), any(EmailSubject.class), any(EmailContent.class));
-        verify(emailLogPersistence).save(captor.capture());
+        verify(emailLogRepository).save(captor.capture());
         assertTrue(captor.getValue().isSent());
     }
 
@@ -50,7 +50,7 @@ class EmailCommandServiceImplTest {
         service.handle(new SendVerificationCodeCommand(new EmailRecipient("user@example.com"), "123456"));
 
         ArgumentCaptor<EmailLog> captor = ArgumentCaptor.forClass(EmailLog.class);
-        verify(emailLogPersistence).save(captor.capture());
+        verify(emailLogRepository).save(captor.capture());
         assertFalse(captor.getValue().isSent());
     }
 }

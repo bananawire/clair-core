@@ -32,4 +32,8 @@ public class ExternalDeviceService {
     public boolean isDeviceOwnedByUser(UUID deviceId, UUID userId) {
         return deviceContextFacade.isDeviceOwnedByUser(deviceId, userId);
     }
+
+    public Optional<java.time.Instant> findVisibleSinceByDeviceId(UUID deviceId) {
+        return deviceContextFacade.findVisibleSinceByDeviceId(deviceId);
+    }
 }

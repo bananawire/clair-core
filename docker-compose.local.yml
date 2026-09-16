@@ -1,0 +1,36 @@
+# Local infrastructure for the laptop deployment (core + edge run as plain processes).
+#   docker compose -f docker-compose.local.yml up -d
+# Ports can be moved if something already listens on them, e.g. CLAIR_PG_PORT=5433 CLAIR_REDIS_PORT=6380.
+# PostgreSQL 15 on 5432, Redis 7 on 6379, Mailpit SMTP on 1025 with its inbox at http://localhost:8025.
+# Data persists in named volumes; `docker compose -f docker-compose.local.yml down -v` wipes it.
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: clair_core
+      POSTGRES_USER: clair
+      POSTGRES_PASSWORD: clair
+    ports:
+      - "${CLAIR_PG_PORT:-5432}:5432"
+    volumes:
+      - clair-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clair -d clair_core"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  redis:
+    image: redis:7
+    ports:
+      - "${CLAIR_REDIS_PORT:-6379}:6379"
+    volumes:
+      - clair-redis:/data
+    command: ["redis-server", "--appendonly", "yes"]
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+volumes:
+  clair-postgres:
+  clair-redis:

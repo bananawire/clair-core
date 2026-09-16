@@ -1,10 +1,8 @@
 package com.claircore.device.domain.model.valueobjects;
 
-import jakarta.persistence.Embeddable;
 
 import java.security.SecureRandom;
 
-@Embeddable
 public record ClaimToken(String value) {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 

@@ -1,17 +1,17 @@
 package com.claircore.alerting.application.internal.commandservices;
 
+import com.claircore.alerting.application.commandservices.AlertCommandService;
 import com.claircore.alerting.application.internal.outboundservices.acl.ExternalAlertingDeviceService;
 import com.claircore.alerting.application.internal.outboundservices.acl.ExternalAlertingThresholdService;
-import com.claircore.alerting.application.internal.outboundservices.acl.AlertIncidentChangedIntegrationEvent;
-import com.claircore.alerting.application.internal.outboundservices.acl.AlertIncidentsChangedPublisher;
+import com.claircore.alerting.domain.model.aggregates.Alert;
 import com.claircore.alerting.domain.model.commands.EvaluateTelemetryForAlertsCommand;
-import com.claircore.alerting.domain.model.entities.Alert;
 import com.claircore.alerting.domain.model.valueobjects.AlertSeverity;
 import com.claircore.alerting.domain.model.valueobjects.AlertStatus;
 import com.claircore.alerting.domain.model.valueobjects.MetricType;
-import com.claircore.alerting.domain.services.AlertCommandService;
-import com.claircore.alerting.infrastructure.persistence.jpa.repositories.AlertRepository;
-import com.claircore.device.domain.model.valueobjects.DeviceMetricThresholdConfiguration;
+import com.claircore.alerting.domain.repositories.AlertRepository;
+import com.claircore.alerting.interfaces.events.AlertIncidentChangedIntegrationEvent;
+import com.claircore.device.interfaces.acl.ThresholdSummary;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +20,12 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Write-side service for the alerting bounded context. With the external edge integration
+ * retired, lifecycle events are now delivered to in-process consumers (e.g. notifications) by
+ * publishing a Spring {@link AlertIncidentChangedIntegrationEvent}; the previous edge webhook
+ * fan-out has been removed.
+ */
 @Service
 public class AlertCommandServiceImpl implements AlertCommandService {
 
@@ -28,29 +34,29 @@ public class AlertCommandServiceImpl implements AlertCommandService {
     private final AlertRepository alertRepository;
     private final ExternalAlertingThresholdService externalThresholdService;
     private final ExternalAlertingDeviceService externalDeviceService;
-    private final AlertIncidentsChangedPublisher alertIncidentsChangedPublisher;
+    private final ApplicationEventPublisher eventPublisher;
 
     public AlertCommandServiceImpl(
             AlertRepository alertRepository,
             ExternalAlertingThresholdService externalThresholdService,
             ExternalAlertingDeviceService externalDeviceService,
-            AlertIncidentsChangedPublisher alertIncidentsChangedPublisher
+            ApplicationEventPublisher eventPublisher
     ) {
         this.alertRepository = alertRepository;
         this.externalThresholdService = externalThresholdService;
         this.externalDeviceService = externalDeviceService;
-        this.alertIncidentsChangedPublisher = alertIncidentsChangedPublisher;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
     @Transactional
     public void handle(EvaluateTelemetryForAlertsCommand command) {
         var spaceId = externalDeviceService.fetchSpaceIdByDeviceId(command.deviceId()).orElse(null);
-        List<DeviceMetricThresholdConfiguration> enabled = externalThresholdService.fetchEnabledThresholdsByDeviceId(command.deviceId());
+        List<ThresholdSummary> enabled = externalThresholdService.fetchEnabledThresholdsByDeviceId(command.deviceId());
 
         Map<MetricType, BigDecimal> telemetry = telemetryValues(command);
-        for (DeviceMetricThresholdConfiguration threshold : enabled) {
-            MetricType metric = MetricType.valueOf(threshold.metric().name());
+        for (ThresholdSummary threshold : enabled) {
+            MetricType metric = MetricType.valueOf(threshold.metric());
             BigDecimal actual = telemetry.get(metric);
             if (actual == null) continue;
 
@@ -65,7 +71,7 @@ public class AlertCommandServiceImpl implements AlertCommandService {
                                     var spaceName = externalDeviceService.fetchSpaceNameBySpaceId(spaceId).orElse(null);
                                     var deviceName = externalDeviceService.fetchDeviceNameByDeviceId(command.deviceId()).orElse(null);
                                     var severity = calculateSeverity(actual, threshold.value());
-                                    Alert created = alertRepository.save(new Alert(
+                                    Alert opened = new Alert(
                                             command.deviceId(),
                                             spaceId,
                                             spaceName,
@@ -76,14 +82,21 @@ public class AlertCommandServiceImpl implements AlertCommandService {
                                             buildMessage(metric, threshold.value(), actual),
                                             severity,
                                             command.occurredAt()
-                                    ));
-                                    publishIncidentChanged(created);
+
+                                            );
+
+                                            opened.markTransition(alertRepository.nextTransitionSequence());
+
+                                            Alert created = alertRepository.save(opened);
+
+                                            publishIncidentChanged(created);
                                 }
                         );
             } else {
                 alertRepository.findFirstByDeviceIdAndMetricAndStatusIn(command.deviceId(), metric, OPEN_STATUSES)
                         .ifPresent(openAlert -> {
                             openAlert.resolve(command.occurredAt());
+                            openAlert.markTransition(alertRepository.nextTransitionSequence());
                             Alert saved = alertRepository.save(openAlert);
                             publishIncidentChanged(saved);
                         });
@@ -91,20 +104,24 @@ public class AlertCommandServiceImpl implements AlertCommandService {
         }
     }
 
+    /**
+     * Publishes a lifecycle event over the in-process bus. Notifications and other alerting
+     * listeners pick it up; the previous edge webhook fan-out is gone.
+     */
     private void publishIncidentChanged(Alert alert) {
         String hardwareId = externalDeviceService.fetchHardwareIdByDeviceId(alert.getDeviceId())
                 .orElse(alert.getDeviceId().toString());
 
-        alertIncidentsChangedPublisher.publish(new AlertIncidentChangedIntegrationEvent(
+        eventPublisher.publishEvent(new AlertIncidentChangedIntegrationEvent(
                 alert.getId(),
                 alert.getDeviceId(),
                 hardwareId,
                 alert.getSpaceId(),
-                alert.getMetric(),
+                alert.getMetric().name(),
                 alert.getThresholdValue(),
                 alert.getActualValue(),
                 alert.getMessage(),
-                alert.getStatus(),
+                alert.getStatus().name(),
                 alert.getOccurredAt(),
                 alert.getResolvedAt()
         ));
@@ -125,8 +142,7 @@ public class AlertCommandServiceImpl implements AlertCommandService {
                 actual.stripTrailingZeros().toPlainString(),
                 metric.unit(),
                 threshold.stripTrailingZeros().toPlainString(),
-                metric.unit()
-        );
+                metric.unit());
     }
 
     private static AlertSeverity calculateSeverity(BigDecimal actual, BigDecimal threshold) {

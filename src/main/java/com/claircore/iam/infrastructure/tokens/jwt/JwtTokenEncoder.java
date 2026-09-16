@@ -1,5 +1,6 @@
 package com.claircore.iam.infrastructure.tokens.jwt;
 
+import com.claircore.iam.application.internal.outboundservices.tokens.TokenService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -14,7 +15,7 @@ import java.util.UUID;
 import java.util.function.Function;
 
 @Component
-public class JwtTokenEncoder {
+public class JwtTokenEncoder implements TokenService {
 
     private static final String CLAIM_TYPE = "type";
     private static final String CLAIM_JTI = "jti";
@@ -27,7 +28,8 @@ public class JwtTokenEncoder {
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
-    public String generateToken(UUID userId, long ttlMillis, String jti) {
+    @Override
+    public String generateAccessToken(UUID userId, long ttlMillis, String jti) {
         return Jwts.builder()
                 .subject(userId.toString())
                 .claim(CLAIM_TYPE, TYPE_ACCESS)
@@ -38,6 +40,7 @@ public class JwtTokenEncoder {
                 .compact();
     }
 
+    @Override
     public String generateRefreshToken(UUID userId, long ttlMillis, String jti) {
         return Jwts.builder()
                 .subject(userId.toString())
@@ -49,6 +52,7 @@ public class JwtTokenEncoder {
                 .compact();
     }
 
+    @Override
     public Optional<String> extractJti(String token) {
         try {
             return Optional.ofNullable(extractClaim(token, claims -> claims.get(CLAIM_JTI, String.class)));
@@ -57,6 +61,7 @@ public class JwtTokenEncoder {
         }
     }
 
+    @Override
     public Optional<UUID> extractUserId(String token) {
         try {
             return Optional.ofNullable(extractClaim(token, Claims::getSubject)).map(UUID::fromString);
@@ -65,6 +70,7 @@ public class JwtTokenEncoder {
         }
     }
 
+    @Override
     public Optional<String> extractType(String token) {
         try {
             return Optional.ofNullable(extractClaim(token, claims -> claims.get(CLAIM_TYPE, String.class)));

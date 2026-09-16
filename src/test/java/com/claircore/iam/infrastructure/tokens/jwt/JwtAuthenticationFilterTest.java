@@ -1,6 +1,7 @@
 package com.claircore.iam.infrastructure.tokens.jwt;
 
-import com.claircore.iam.domain.services.TokenQueryService;
+import com.claircore.iam.application.queryservices.TokenQueryService;
+import com.claircore.shared.interfaces.rest.security.CurrentUserIdArgumentResolver;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -58,7 +59,7 @@ class JwtAuthenticationFilterTest {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         assertNotNull(authentication);
         assertEquals(userId.toString(), authentication.getName());
-        assertEquals(userId, request.getAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE));
+        assertEquals(userId, request.getAttribute(CurrentUserIdArgumentResolver.USER_ID_ATTRIBUTE));
         verify(filterChain).doFilter(request, response);
     }
 

@@ -1,18 +1,9 @@
 package com.claircore.iam.domain.model.valueobjects;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.persistence.Embeddable;
-
 import java.util.UUID;
 
-@Embeddable
-public record RegistrationSessionId(
-    String id
-) {
-    @JsonCreator
-    public RegistrationSessionId(@JsonProperty("id") String id) {
-        this.id = id;
+public record RegistrationSessionId(String id) {
+    public RegistrationSessionId {
         if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("Registration session ID cannot be null or empty");
         }

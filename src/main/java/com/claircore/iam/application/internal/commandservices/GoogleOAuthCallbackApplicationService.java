@@ -1,10 +1,10 @@
 package com.claircore.iam.application.internal.commandservices;
 
 import com.claircore.iam.domain.model.commands.AuthenticateWithGoogleCommand;
-import com.claircore.iam.domain.model.entities.User;
+import com.claircore.iam.application.commandservices.GoogleAuthenticationCommandService;
+import com.claircore.iam.application.internal.outboundservices.oauth.GoogleTokenExchange;
+import com.claircore.iam.domain.model.aggregates.User;
 import com.claircore.iam.domain.model.valueobjects.GoogleIdToken;
-import com.claircore.iam.domain.services.GoogleAuthenticationCommandService;
-import com.claircore.iam.infrastructure.oauth.google.GoogleAuthorizationCodeTokenClient;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -12,11 +12,11 @@ import java.util.Optional;
 @Service
 public class GoogleOAuthCallbackApplicationService {
 
-    private final GoogleAuthorizationCodeTokenClient tokenClient;
+    private final GoogleTokenExchange tokenClient;
     private final GoogleAuthenticationCommandService authenticationCommandService;
 
     public GoogleOAuthCallbackApplicationService(
-            GoogleAuthorizationCodeTokenClient tokenClient,
+            GoogleTokenExchange tokenClient,
             GoogleAuthenticationCommandService authenticationCommandService
     ) {
         this.tokenClient = tokenClient;

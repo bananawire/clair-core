@@ -1,6 +1,6 @@
 package com.claircore.iam.interfaces.rest.transform;
 
-import com.claircore.iam.domain.model.entities.User;
+import com.claircore.iam.domain.model.aggregates.User;
 import com.claircore.iam.domain.model.valueobjects.EmailAddress;
 import com.claircore.iam.domain.model.valueobjects.OAuthProvider;
 import com.claircore.iam.domain.model.valueobjects.Password;
@@ -22,7 +22,8 @@ class UserResourceFromEntityAssemblerTest {
                 UserStatus.ACTIVE,
                 OAuthProvider.MAIL,
                 null
-        );
+        ,
+                null, null);
 
         var resource = UserResourceFromEntityAssembler.toResourceFromEntity(user);
 

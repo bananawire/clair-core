@@ -1,7 +1,7 @@
 package com.claircore.iam.infrastructure.oauth.google;
 
 import com.claircore.iam.domain.model.valueobjects.*;
-import com.claircore.iam.domain.services.GoogleTokenVerifier;
+import com.claircore.iam.application.internal.outboundservices.oauth.GoogleTokenVerifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;

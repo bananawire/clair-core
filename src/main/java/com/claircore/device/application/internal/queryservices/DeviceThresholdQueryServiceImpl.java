@@ -1,12 +1,12 @@
 package com.claircore.device.application.internal.queryservices;
 
-import com.claircore.device.domain.model.entities.DeviceAssignment;
+import com.claircore.device.domain.model.aggregates.DeviceAssignment;
 import com.claircore.device.domain.model.queries.GetDeviceThresholdByMetricQuery;
 import com.claircore.device.domain.model.queries.GetDeviceThresholdsByDeviceQuery;
 import com.claircore.device.domain.model.valueobjects.DeviceMetricThresholdConfiguration;
 import com.claircore.device.domain.model.valueobjects.MetricThreshold;
-import com.claircore.device.domain.services.DeviceThresholdQueryService;
-import com.claircore.device.infrastructure.persistence.jpa.repositories.DeviceAssignmentRepository;
+import com.claircore.device.application.queryservices.DeviceThresholdQueryService;
+import com.claircore.device.domain.repositories.DeviceAssignmentRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -66,6 +66,14 @@ public class DeviceThresholdQueryServiceImpl implements DeviceThresholdQueryServ
         return findAllByAssignmentId(assignmentId).stream()
                 .filter(DeviceMetricThresholdConfiguration::enabled)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DeviceMetricThresholdConfiguration> findEnabledByDeviceId(UUID deviceId) {
+        return deviceAssignmentRepository.findByDeviceId(deviceId)
+                .map(this::readThresholdsFromConfig).orElseGet(List::of).stream()
+                .filter(DeviceMetricThresholdConfiguration::enabled).toList();
     }
 
     private List<DeviceMetricThresholdConfiguration> readThresholdsFromConfig(DeviceAssignment assignment) {

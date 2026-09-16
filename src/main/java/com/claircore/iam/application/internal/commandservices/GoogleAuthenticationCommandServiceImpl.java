@@ -1,14 +1,14 @@
 package com.claircore.iam.application.internal.commandservices;
 
 import com.claircore.iam.domain.model.commands.AuthenticateWithGoogleCommand;
-import com.claircore.iam.domain.model.entities.User;
+import com.claircore.iam.application.commandservices.GoogleAuthenticationCommandService;
+import com.claircore.iam.application.internal.outboundservices.oauth.GoogleTokenVerifier;
+import com.claircore.iam.domain.model.aggregates.User;
 import com.claircore.iam.domain.model.events.UserAuthenticatedWithGoogleEvent;
-import com.claircore.iam.domain.model.events.UserRegisteredEvent;
 import com.claircore.iam.domain.model.valueobjects.EmailAddress;
 import com.claircore.iam.domain.model.valueobjects.OAuthProvider;
-import com.claircore.iam.domain.services.GoogleAuthenticationCommandService;
-import com.claircore.iam.domain.services.GoogleTokenVerifier;
-import com.claircore.iam.infrastructure.persistence.jpa.repositories.UserRepository;
+import com.claircore.iam.domain.repositories.UserRepository;
+import com.claircore.iam.interfaces.events.UserRegisteredIntegrationEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,10 +54,11 @@ public class GoogleAuthenticationCommandServiceImpl implements GoogleAuthenticat
             if (!user.isOAuthUser()) {
                 user.linkOAuthAccount(OAuthProvider.GOOGLE, subject);
             }
+            user = userRepository.save(user);
         } else {
             user = new User(email, OAuthProvider.GOOGLE, subject);
             user = userRepository.save(user);
-            eventPublisher.publishEvent(new UserRegisteredEvent(this, user.getId()));
+            eventPublisher.publishEvent(new UserRegisteredIntegrationEvent(user.getId()));
         }
 
         eventPublisher.publishEvent(new UserAuthenticatedWithGoogleEvent(

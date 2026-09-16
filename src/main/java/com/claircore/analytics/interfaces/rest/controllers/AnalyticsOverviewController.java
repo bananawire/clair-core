@@ -1,16 +1,15 @@
 package com.claircore.analytics.interfaces.rest.controllers;
 
 import com.claircore.analytics.domain.model.queries.GetOverviewDashboardQuery;
-import com.claircore.analytics.domain.services.OverviewDashboardQueryService;
+import com.claircore.analytics.application.queryservices.OverviewDashboardQueryService;
 import com.claircore.analytics.interfaces.rest.resources.AnalyticsOverviewResponse;
-import com.claircore.analytics.interfaces.rest.transform.AnalyticsOverviewTransform;
-import com.claircore.iam.infrastructure.tokens.jwt.JwtAuthenticationFilter;
+import com.claircore.analytics.interfaces.rest.transform.AnalyticsOverviewResourceFromEntityAssembler;
+import com.claircore.shared.interfaces.rest.security.CurrentUserId;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.http.ResponseEntity;
@@ -41,14 +40,13 @@ public class AnalyticsOverviewController {
             @ApiResponse(responseCode = "401", description = "Authentication required", content = @Content)
     })
     public ResponseEntity<AnalyticsOverviewResponse> getOverview(
-            HttpServletRequest request,
+            @CurrentUserId UUID userId,
             @RequestParam(required = false, defaultValue = "50") @Min(1) @Max(200) Integer deviceLimitPerSpace,
             @RequestParam(required = false, defaultValue = "10") @Min(1) @Max(50) Integer alertLimit
     ) {
-        UUID userId = (UUID) request.getAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE);
         var query = new GetOverviewDashboardQuery(userId, deviceLimitPerSpace, alertLimit);
         var snapshot = overviewDashboardQueryService.handle(query);
-        return ResponseEntity.ok(AnalyticsOverviewTransform.toResponse(snapshot));
+        return ResponseEntity.ok(AnalyticsOverviewResourceFromEntityAssembler.toResponse(snapshot));
     }
 }
 

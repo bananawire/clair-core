@@ -1,12 +1,12 @@
 package com.claircore.device.interfaces.rest.controllers;
 
 import com.claircore.device.domain.model.commands.CreateDeviceCommandCommand;
-import com.claircore.device.domain.model.entities.DeviceCommand;
+import com.claircore.device.domain.model.aggregates.DeviceCommand;
 import com.claircore.device.domain.model.queries.GetDeviceCommandByIdForUserQuery;
 import com.claircore.device.domain.model.queries.GetLatestDeviceCommandByDeviceForUserQuery;
 import com.claircore.device.domain.model.valueobjects.UserId;
-import com.claircore.device.domain.services.DeviceControlCommandService;
-import com.claircore.device.domain.services.DeviceCommandQueryService;
+import com.claircore.device.application.commandservices.DeviceControlCommandService;
+import com.claircore.device.application.queryservices.DeviceCommandQueryService;
 import com.claircore.device.interfaces.rest.resources.CreateDeviceCommandRequest;
 import com.claircore.device.interfaces.rest.resources.DeviceCommandResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -105,13 +105,13 @@ public class DeviceCommandController {
     }
 
     private DeviceCommandResponse toResponse(DeviceCommand command) {
-        Instant createdAt = command.getAuditFields().getCreatedAt() != null
-                ? command.getAuditFields().getCreatedAt().toInstant()
+        Instant createdAt = command.getCreatedAt() != null
+                ? command.getCreatedAt()
                 : null;
 
         return new DeviceCommandResponse(
                 command.getId(),
-                command.getDevice().getId(),
+                command.getDeviceId(),
                 command.getType(),
                 command.getStatus(),
                 command.getPayload(),

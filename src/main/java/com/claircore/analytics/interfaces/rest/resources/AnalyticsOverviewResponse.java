@@ -20,6 +20,9 @@ public record AnalyticsOverviewResponse(
         @Schema(description = "When the overview was computed", example = "2026-05-23T10:00:00Z")
         Instant updatedAt
 ) {
+    @com.fasterxml.jackson.annotation.JsonProperty("indexLabel")
+    public String indexLabel() { return "Indicative PM2.5 index (EPA breakpoints; not NowCast)"; }
+
     @Schema(description = "Aggregated metrics across the user's device fleet")
     public record CoreMetrics(
             @Schema(description = "Aggregated AQI value", example = "75", nullable = true)

@@ -1,7 +1,7 @@
 package com.claircore.analytics.application.internal.commandservices;
 
-import com.claircore.analytics.application.internal.services.KpiLiveMetricsBuffer;
-import com.claircore.analytics.application.internal.services.KpiLiveMetricsCache;
+import com.claircore.analytics.application.internal.outboundservices.cache.KpiLiveMetricsBuffer;
+import com.claircore.analytics.application.internal.outboundservices.cache.LiveMetricsStore;
 import com.claircore.analytics.domain.model.commands.ProcessTelemetryAnalyticCommand;
 import com.claircore.analytics.domain.model.events.TelemetryReceivedEvent;
 import com.claircore.analytics.domain.model.valueobjects.DeviceId;
@@ -22,7 +22,7 @@ import static org.mockito.Mockito.*;
 class KpiLiveMetricsCommandServiceImplTest {
 
     @Mock
-    private KpiLiveMetricsCache liveMetricsCache;
+    private LiveMetricsStore liveMetricsStore;
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
@@ -45,7 +45,7 @@ class KpiLiveMetricsCommandServiceImplTest {
         );
 
         var buffer = spy(new KpiLiveMetricsBuffer());
-        when(liveMetricsCache.getOrCreate(deviceUuid)).thenReturn(buffer);
+        when(liveMetricsStore.getOrCreate(deviceUuid)).thenReturn(buffer);
 
         commandService.handle(command);
 

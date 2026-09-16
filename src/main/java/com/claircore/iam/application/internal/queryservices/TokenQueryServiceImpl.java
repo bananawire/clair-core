@@ -1,11 +1,11 @@
 package com.claircore.iam.application.internal.queryservices;
 
-import com.claircore.iam.domain.model.entities.TokenSession;
+import com.claircore.iam.application.internal.outboundservices.tokens.TokenService;
+import com.claircore.iam.application.queryservices.TokenQueryService;
+import com.claircore.iam.domain.model.aggregates.TokenSession;
 import com.claircore.iam.domain.model.valueobjects.TokenJti;
 import com.claircore.iam.domain.model.valueobjects.TokenType;
-import com.claircore.iam.domain.services.TokenQueryService;
-import com.claircore.iam.infrastructure.persistence.redis.repositories.TokenSessionRepository;
-import com.claircore.iam.infrastructure.tokens.jwt.JwtTokenEncoder;
+import com.claircore.iam.domain.repositories.TokenSessionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,11 +16,11 @@ import java.util.UUID;
 public class TokenQueryServiceImpl implements TokenQueryService {
 
     private final TokenSessionRepository tokenSessionRepository;
-    private final JwtTokenEncoder jwtTokenEncoder;
+    private final TokenService tokenService;
 
-    public TokenQueryServiceImpl(TokenSessionRepository tokenSessionRepository, JwtTokenEncoder jwtTokenEncoder) {
+    public TokenQueryServiceImpl(TokenSessionRepository tokenSessionRepository, TokenService tokenService) {
         this.tokenSessionRepository = tokenSessionRepository;
-        this.jwtTokenEncoder = jwtTokenEncoder;
+        this.tokenService = tokenService;
     }
 
     @Override
@@ -36,8 +36,8 @@ public class TokenQueryServiceImpl implements TokenQueryService {
     }
 
     private boolean isTokenValidByType(String jwtToken, TokenType expectedType) {
-        Optional<String> jti = jwtTokenEncoder.extractJti(jwtToken);
-        Optional<String> type = jwtTokenEncoder.extractType(jwtToken);
+        Optional<String> jti = tokenService.extractJti(jwtToken);
+        Optional<String> type = tokenService.extractType(jwtToken);
 
         if (jti.isEmpty() || type.isEmpty()) {
             return false;
@@ -53,14 +53,14 @@ public class TokenQueryServiceImpl implements TokenQueryService {
     @Override
     @Transactional(readOnly = true)
     public Optional<UUID> getUserIdFromToken(String jwtToken) {
-        return jwtTokenEncoder.extractUserId(jwtToken);
+        return tokenService.extractUserId(jwtToken);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Optional<TokenSession> getTokenSession(String jwtToken) {
-        Optional<String> jti = jwtTokenEncoder.extractJti(jwtToken);
-        Optional<String> type = jwtTokenEncoder.extractType(jwtToken);
+        Optional<String> jti = tokenService.extractJti(jwtToken);
+        Optional<String> type = tokenService.extractType(jwtToken);
 
         if (jti.isEmpty() || type.isEmpty()) {
             return Optional.empty();

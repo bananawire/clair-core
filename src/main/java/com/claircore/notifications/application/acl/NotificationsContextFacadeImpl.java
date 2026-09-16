@@ -1,9 +1,9 @@
 package com.claircore.notifications.application.acl;
 
+import com.claircore.notifications.application.commandservices.EmailCommandService;
 import com.claircore.notifications.domain.model.commands.SendVerificationCodeCommand;
 import com.claircore.notifications.domain.model.commands.SendWelcomeEmailCommand;
 import com.claircore.notifications.domain.model.valueobjects.EmailRecipient;
-import com.claircore.notifications.domain.services.EmailCommandService;
 import com.claircore.notifications.interfaces.acl.NotificationsContextFacade;
 import org.springframework.stereotype.Service;
 

@@ -1,7 +1,6 @@
 package com.claircore.iam.infrastructure.config;
 
 import com.claircore.iam.infrastructure.tokens.jwt.JwtAuthenticationFilter;
-import com.claircore.shared.infrastructure.security.ServiceTokenAuthenticationFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,22 +19,26 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
 
+/**
+ * Web security for clair-core. The edge service used to authenticate itself with
+ * {@code ServiceTokenAuthenticationFilter}; that integration has been retired
+ * and its filter is gone, so only the JWT filter remains in front of
+ * {@link UsernamePasswordAuthenticationFilter}.
+ */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfiguration {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
-    private final ServiceTokenAuthenticationFilter serviceTokenAuthenticationFilter;
 
     @Value("${cors.allowed-origins}")
     private String allowedOrigins;
 
-    public SecurityConfiguration(JwtAuthenticationFilter jwtAuthenticationFilter, JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint,
-                                 ServiceTokenAuthenticationFilter serviceTokenAuthenticationFilter) {
+    public SecurityConfiguration(JwtAuthenticationFilter jwtAuthenticationFilter,
+                                JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.jwtAuthenticationEntryPoint = jwtAuthenticationEntryPoint;
-        this.serviceTokenAuthenticationFilter = serviceTokenAuthenticationFilter;
     }
 
     @Bean
@@ -74,16 +77,14 @@ public class SecurityConfiguration {
                                 "/api/v1/subscriptions/checkout-session",
                                 "/api/v1/subscriptions/payment-intent",
                                 "/api/v1/webhooks/stripe",
-                        "/api/v1/edge/**",
-                        "/api/v1/evaluations/telemetry/batch",
-                        "/api/v1/evaluations/telemetry",
-                        "/favicon.ico",
+                                "/api/v1/evaluations/telemetry/batch",
+                                "/api/v1/evaluations/telemetry",
+                                "/favicon.ico",
                                 "/error"
                         ).permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .anyRequest().authenticated()
                 )
-                .addFilterBefore(serviceTokenAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
@@ -94,7 +95,8 @@ public class SecurityConfiguration {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(Arrays.asList(allowedOrigins.split(",")));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-                configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Requested-With", "X-API-Key", "X-Edge-Token", "X-Core-Token"));
+        // X-Edge-Token / X-Core-Token are gone with the external edge integration.
+        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Requested-With", "X-API-Key"));
         configuration.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

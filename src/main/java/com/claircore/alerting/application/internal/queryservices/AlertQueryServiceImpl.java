@@ -6,7 +6,6 @@ import com.claircore.alerting.domain.model.aggregates.Alert;
 import com.claircore.alerting.domain.model.queries.GetAlertsByDeviceQuery;
 import com.claircore.alerting.domain.model.queries.GetAlertsByOwnerQuery;
 import com.claircore.alerting.domain.model.queries.GetAlertsBySpaceQuery;
-import com.claircore.alerting.domain.model.queries.GetPendingEdgeAlertsQuery;
 import com.claircore.alerting.domain.model.valueobjects.AlertStatus;
 import com.claircore.alerting.domain.model.valueobjects.DailyAlertCount;
 import com.claircore.alerting.domain.repositories.AlertRepository;
@@ -113,30 +112,6 @@ public class AlertQueryServiceImpl implements AlertQueryService {
             return List.of();
         }
         return alertRepository.countAlertsPerDayByDeviceIds(ownerDeviceIds, since(days));
-    }
-
-    /**
-     * The hardware ids used to arrive from a {@code JOIN Device} inside alerting's own query. They
-     * now come from the device facade in one batch call, which is where a device attribute belongs.
-     * An alert whose device has since been removed is dropped rather than sent with a null id.
-     */
-    @Override
-    @Transactional(readOnly = true)
-    public List<PendingEdgeAlert> fetchPendingForEdge(GetPendingEdgeAlertsQuery query) {
-        List<Alert> pending = alertRepository.findPendingForEdge(
-                List.of(AlertStatus.ACTIVE, AlertStatus.ACKNOWLEDGED, AlertStatus.RESOLVED),
-                query.afterSequence(), query.limit());
-        if (pending.isEmpty()) {
-            return List.of();
-        }
-
-        var hardwareIds = externalDeviceService.fetchHardwareIdsByDeviceIds(
-                pending.stream().map(Alert::getDeviceId).distinct().toList());
-
-        return pending.stream()
-                .filter(alert -> hardwareIds.get(alert.getDeviceId()) != null)
-                .map(alert -> new PendingEdgeAlert(alert, hardwareIds.get(alert.getDeviceId())))
-                .toList();
     }
 
     private static Instant since(int days) {

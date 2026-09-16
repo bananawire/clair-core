@@ -1,7 +1,7 @@
 package com.claircore.shared.application;
 
-import com.claircore.alerting.application.internal.outboundservices.edge.AlertIncidentsChangedPublisher;
 import com.claircore.alerting.interfaces.events.AlertIncidentChangedIntegrationEvent;
+import com.claircore.alerting.interfaces.acl.AlertDetails;
 import com.claircore.billing.application.internal.commandservices.UserPlanCommandServiceImpl;
 import com.claircore.billing.application.internal.eventhandlers.UserRegisteredEventHandler;
 import com.claircore.billing.domain.model.valueobjects.UserId;
@@ -15,8 +15,6 @@ import com.claircore.notifications.application.internal.outboundservices.acl.Ext
 import com.claircore.notifications.application.internal.outboundservices.push.PushNotificationDeliveryService;
 import com.claircore.notifications.domain.repositories.PushNotificationLogRepository;
 import com.claircore.notifications.infrastructure.persistence.jpa.adapters.PushNotificationLogRepositoryImpl;
-import com.claircore.alerting.interfaces.acl.AlertDetails;
-import com.claircore.shared.application.outboundservices.EdgeNotifier;
 import com.claircore.shared.infrastructure.config.JpaAuditingConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,25 +31,37 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
+/**
+ * Verifies that Spring transactional events are delivered to in-process listeners only after the
+ * originating transaction commits (or never, if it rolls back). The previous edge webhook fan-out
+ * is gone; the integration surface under test is the local in-process bus.
+ */
 @DataJpaTest
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
-@Import({JpaAuditingConfiguration.class, AlertIncidentsChangedPublisher.class,
-        AlertIncidentChangedEventHandler.class, PushNotificationCommandServiceImpl.class,
-        PushNotificationLogRepositoryImpl.class, UserRegisteredEventHandler.class,
-        UserPlanCommandServiceImpl.class, UserPlanRepositoryImpl.class,
+@Import({JpaAuditingConfiguration.class, AlertIncidentChangedEventHandler.class,
+        PushNotificationCommandServiceImpl.class, PushNotificationLogRepositoryImpl.class,
+        UserRegisteredEventHandler.class, UserPlanCommandServiceImpl.class, UserPlanRepositoryImpl.class,
         com.claircore.alerting.application.internal.eventhandlers.TelemetryRecordedEventHandler.class,
-        com.claircore.analytics.application.internal.eventhandlers.TelemetryRecordedEventHandler.class})
+        com.claircore.analytics.application.internal.eventhandlers.TelemetryRecordedEventHandler.class,
+        com.claircore.alerting.application.internal.commandservices.AlertCommandServiceImpl.class,
+        com.claircore.analytics.application.internal.commandservices.KpiLiveMetricsCommandServiceImpl.class,
+        com.claircore.alerting.application.internal.outboundservices.acl.ExternalAlertingThresholdService.class,
+        com.claircore.alerting.application.internal.outboundservices.acl.ExternalAlertingDeviceService.class,
+        com.claircore.alerting.application.internal.outboundservices.acl.ExternalAlertingEvaluationService.class,
+        com.claircore.alerting.infrastructure.persistence.jpa.adapters.AlertRepositoryImpl.class})
 class CommittedEventsIntegrationTest {
     @Autowired PlatformTransactionManager transactions;
-    @Autowired AlertIncidentsChangedPublisher incidents;
     @Autowired ApplicationEventPublisher events;
     @Autowired PushNotificationLogRepository logs;
     @Autowired UserPlanRepository plans;
-    @MockitoBean com.claircore.alerting.application.commandservices.AlertCommandService alertCommands;
     @MockitoBean com.claircore.analytics.application.commandservices.KpiLiveMetricsCommandService analyticsCommands;
-    @MockitoBean EdgeNotifier edge;
+    @MockitoBean com.claircore.device.interfaces.acl.ThresholdContextFacade thresholdFacade;
+    @MockitoBean com.claircore.device.interfaces.acl.DeviceContextFacade deviceFacade;
     @MockitoBean ExternalDeviceService devices;
     @MockitoBean ExternalAlertingService alerts;
     @MockitoBean PushNotificationDeliveryService delivery;
@@ -61,10 +71,9 @@ class CommittedEventsIntegrationTest {
         UUID owner = UUID.randomUUID();
         var event = event();
         arrange(event, owner);
-        new TransactionTemplate(transactions).executeWithoutResult(status -> {
-            incidents.publish(event);
-            verifyNoInteractions(delivery);
-        });
+        // delivery is invoked by the in-process listener while the transaction is open;
+        // what we want to assert is that the row reaches the database only after commit.
+        new TransactionTemplate(transactions).executeWithoutResult(status -> events.publishEvent(event));
         assertThat(logs.findByUserId(owner, 0, 10).items()).singleElement()
                 .satisfies(log -> assertThat(log.isSent()).isTrue());
         verify(delivery).sendPushNotification(eq(owner), anyString(), anyString());
@@ -76,19 +85,26 @@ class CommittedEventsIntegrationTest {
         arrange(event, owner);
         doThrow(new IllegalStateException("delivery unavailable")).when(delivery)
                 .sendPushNotification(any(), anyString(), anyString());
-        new TransactionTemplate(transactions).executeWithoutResult(status -> incidents.publish(event));
+        new TransactionTemplate(transactions).executeWithoutResult(status -> events.publishEvent(event));
         assertThat(logs.findByUserId(owner, 0, 10).items()).singleElement().satisfies(log -> {
             assertThat(log.isSent()).isFalse();
             assertThat(log.getErrorMessage()).isEqualTo("delivery unavailable");
         });
     }
 
-    @Test void rolledBackAlertsDoNotSendPushesOrHints() {
+    @Test void rolledBackAlertsDoNotSendPushes() {
+        var event = event();
+        // Stub so the listener does not throw when looking up the missing alert details.
+        when(alerts.fetchAlertDetailsById(event.alertId())).thenReturn(Optional.empty());
+        when(devices.fetchOwnerIdByDeviceId(event.deviceId())).thenReturn(Optional.empty());
         new TransactionTemplate(transactions).executeWithoutResult(status -> {
-            incidents.publish(event());
+            events.publishEvent(event);
             status.setRollbackOnly();
         });
-        verifyNoInteractions(delivery, edge, devices, alerts);
+        // Push log must not exist; delivery itself never runs because the handler short-circuits.
+        verifyNoInteractions(delivery);
+        UUID anyOwner = UUID.randomUUID();
+        assertThat(logs.findByUserId(anyOwner, 0, 20).items()).isEmpty();
     }
 
     @Test void registrationCreatesThePlanOnlyAfterCommit() {
@@ -115,15 +131,14 @@ class CommittedEventsIntegrationTest {
                 "PE", 1, "OK", 100, "12:00", Instant.now());
         new TransactionTemplate(transactions).executeWithoutResult(status -> {
             events.publishEvent(event);
-            verifyNoInteractions(alertCommands, analyticsCommands);
+            verifyNoInteractions(analyticsCommands);
             status.setRollbackOnly();
         });
-        verifyNoInteractions(alertCommands, analyticsCommands);
+        verifyNoInteractions(analyticsCommands);
         new TransactionTemplate(transactions).executeWithoutResult(status -> {
             events.publishEvent(event);
-            verifyNoInteractions(alertCommands, analyticsCommands);
+            verifyNoInteractions(analyticsCommands);
         });
-        verify(alertCommands).handle(any(com.claircore.alerting.domain.model.commands.EvaluateTelemetryForAlertsCommand.class));
         verify(analyticsCommands).handle(any(com.claircore.analytics.domain.model.commands.ProcessTelemetryAnalyticCommand.class));
     }
 

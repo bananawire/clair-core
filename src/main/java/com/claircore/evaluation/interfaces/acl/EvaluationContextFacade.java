@@ -15,4 +15,11 @@ public interface EvaluationContextFacade {
     List<TelemetryReading> getReadingsBetween(Instant start, Instant end);
     /** Alerting reports that it finished with a reading; the receipt stops the catch-up replay. */
     void markAlertsEvaluated(UUID deviceId, UUID readingId);
+
+    /**
+     * Submits one external telemetry reading to the Evaluation bounded context. The facade
+     * generates a fresh {@code readingId} on the caller side and translates any rejection into a
+     * non-throwing {@link TelemetryRecordingResult}.
+     */
+    TelemetryRecordingResult recordTelemetry(TelemetrySubmission submission);
 }

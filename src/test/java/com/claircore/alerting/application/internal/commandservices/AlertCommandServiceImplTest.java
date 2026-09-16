@@ -1,13 +1,8 @@
 package com.claircore.alerting.application.internal.commandservices;
 
-import com.claircore.alerting.application.commandservices.AlertCommandService.AcknowledgementOutcome;
-import com.claircore.alerting.application.internal.outboundservices.edge.AlertIncidentsChangedPublisher;
 import com.claircore.alerting.application.internal.outboundservices.acl.ExternalAlertingDeviceService;
 import com.claircore.alerting.application.internal.outboundservices.acl.ExternalAlertingThresholdService;
 import com.claircore.alerting.domain.model.aggregates.Alert;
-import com.claircore.alerting.application.commandservices.AlertCommandService;
-import com.claircore.alerting.domain.model.commands.AcknowledgeEdgeAlertCommand;
-import com.claircore.alerting.domain.model.commands.RecordEdgeAlertReceiptCommand;
 import com.claircore.alerting.domain.model.commands.EvaluateTelemetryForAlertsCommand;
 import com.claircore.alerting.domain.model.valueobjects.AlertSeverity;
 import com.claircore.alerting.domain.model.valueobjects.AlertStatus;
@@ -21,6 +16,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -34,6 +30,7 @@ import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -49,7 +46,7 @@ class AlertCommandServiceImplTest {
     private ExternalAlertingDeviceService externalDeviceService;
 
     @Mock
-    private AlertIncidentsChangedPublisher alertIncidentsChangedPublisher;
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private AlertCommandServiceImpl service;
@@ -57,7 +54,6 @@ class AlertCommandServiceImplTest {
     private static final UUID DEVICE_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final Instant OCCURRED_AT = Instant.parse("2026-05-16T22:30:00Z");
 
-    /** The threshold arrives as a name, not device's enum, and alerting maps it to its own metric. */
     @Test
     void opensAnAlertWhenAThresholdIsBreached() {
         when(alertRepository.nextTransitionSequence()).thenReturn(41L);
@@ -84,7 +80,7 @@ class AlertCommandServiceImplTest {
 
         ArgumentCaptor<AlertIncidentChangedIntegrationEvent> published =
                 ArgumentCaptor.forClass(AlertIncidentChangedIntegrationEvent.class);
-        verify(alertIncidentsChangedPublisher).publish(published.capture());
+        verify(eventPublisher).publishEvent(published.capture());
         assertThat(published.getValue().hardwareId()).isEqualTo("HW-0001");
     }
 
@@ -99,7 +95,7 @@ class AlertCommandServiceImplTest {
         service.handle(command(new BigDecimal("80.00")));
 
         verify(alertRepository, never()).save(any());
-        verify(alertIncidentsChangedPublisher, never()).publish(any());
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
@@ -122,84 +118,6 @@ class AlertCommandServiceImplTest {
         assertThat(saved.getValue().getTransitionSequence()).isEqualTo(42L);
     }
 
-    @Test
-    void acknowledgesAnActiveAlertForTheOwningHardware() {
-        var alert = openAlert();
-        when(alertRepository.nextTransitionSequence()).thenReturn(43L);
-        when(alertRepository.findByIdForAcknowledgement(alert.getId())).thenReturn(Optional.of(alert));
-        when(externalDeviceService.fetchHardwareIdByDeviceId(DEVICE_ID)).thenReturn(Optional.of("HW-0001"));
-
-        var outcome = service.handle(new AcknowledgeEdgeAlertCommand(alert.getId(), "HW-0001", Instant.now()));
-
-        assertThat(outcome).isEqualTo(AcknowledgementOutcome.OK);
-        assertThat(alert.getStatus()).isEqualTo(AlertStatus.ACKNOWLEDGED);
-        verify(alertRepository).save(alert);
-        assertThat(alert.getTransitionSequence()).isEqualTo(43L);
-    }
-
-    /**
-     * Ownership is checked before lifecycle state, so a wrong hardware id cannot tell an alert
-     * apart from one that does not exist. It resolves through the device facade now; it used to
-     * come from a {@code JOIN Device} in alerting's own repository.
-     */
-    @Test
-    void hidesAnAlertBelongingToAnotherHardwareIdentity() {
-        var alert = acknowledgedAlert();
-        when(alertRepository.findByIdForAcknowledgement(alert.getId())).thenReturn(Optional.of(alert));
-        when(externalDeviceService.fetchHardwareIdByDeviceId(DEVICE_ID)).thenReturn(Optional.of("HW-owner"));
-
-        var outcome = service.handle(new AcknowledgeEdgeAlertCommand(alert.getId(), "HW-other", Instant.now()));
-
-        assertThat(outcome).isEqualTo(AcknowledgementOutcome.NOT_FOUND);
-        verify(alertRepository, never()).save(any());
-    }
-
-    @Test
-    void reportsAConflictWhenTheAlertWasAlreadyAcknowledged() {
-        var alert = acknowledgedAlert();
-        when(alertRepository.findByIdForAcknowledgement(alert.getId())).thenReturn(Optional.of(alert));
-        when(externalDeviceService.fetchHardwareIdByDeviceId(DEVICE_ID)).thenReturn(Optional.of("HW-0001"));
-
-        var outcome = service.handle(new AcknowledgeEdgeAlertCommand(alert.getId(), "HW-0001", Instant.now()));
-
-        assertThat(outcome).isEqualTo(AcknowledgementOutcome.CONFLICT);
-        verify(alertRepository, never()).save(any());
-    }
-
-    @Test
-    void reportsNotFoundWhenTheAlertDoesNotExist() {
-        UUID alertId = UUID.randomUUID();
-        when(alertRepository.findByIdForAcknowledgement(alertId)).thenReturn(Optional.empty());
-
-        assertThat(service.handle(new AcknowledgeEdgeAlertCommand(alertId, "HW-0001", Instant.now())))
-                .isEqualTo(AcknowledgementOutcome.NOT_FOUND);
-    }
-
-    @Test
-    void aReceiptRecordsDeliveryWithoutTouchingTheBusinessStatus() {
-        var alert = openAlert();
-        alert.markTransition(10);
-        when(alertRepository.findByIdForAcknowledgement(alert.getId())).thenReturn(Optional.of(alert));
-        when(externalDeviceService.fetchHardwareIdByDeviceId(DEVICE_ID)).thenReturn(Optional.of("HW-0001"));
-        var outcome = service.handle(new RecordEdgeAlertReceiptCommand(alert.getId(), "HW-0001", 10));
-        assertThat(outcome).isEqualTo(AlertCommandService.ReceiptOutcome.OK);
-        assertThat(alert.getStatus()).isEqualTo(AlertStatus.ACTIVE);
-        assertThat(alert.getEdgeReceiptSequence()).isEqualTo(10L);
-        verify(alertRepository).save(alert);
-        verify(alertRepository, never()).nextTransitionSequence();
-    }
-
-    @Test
-    void aReceiptFromAnotherUnitIsNotFoundAndRecordsNothing() {
-        var alert = openAlert();
-        when(alertRepository.findByIdForAcknowledgement(alert.getId())).thenReturn(Optional.of(alert));
-        when(externalDeviceService.fetchHardwareIdByDeviceId(DEVICE_ID)).thenReturn(Optional.of("HW-owner"));
-        assertThat(service.handle(new RecordEdgeAlertReceiptCommand(alert.getId(), "HW-other", 1)))
-                .isEqualTo(AlertCommandService.ReceiptOutcome.NOT_FOUND);
-        assertThat(alert.getEdgeReceiptSequence()).isNull();
-        verify(alertRepository, never()).save(any());
-    }
-
     private static EvaluateTelemetryForAlertsCommand command(BigDecimal pm25) {
         return new EvaluateTelemetryForAlertsCommand(DEVICE_ID, OCCURRED_AT, pm25,
                 new BigDecimal("400"), new BigDecimal("22"), new BigDecimal("50"));
@@ -209,11 +127,5 @@ class AlertCommandServiceImplTest {
         return new Alert(DEVICE_ID, null, null, null, MetricType.PM25,
                 new BigDecimal("50.00"), new BigDecimal("80.00"), "PM2.5 threshold exceeded",
                 AlertSeverity.CRITICAL, OCCURRED_AT);
-    }
-
-    private static Alert acknowledgedAlert() {
-        var alert = openAlert();
-        alert.acknowledge();
-        return alert;
     }
 }

@@ -45,4 +45,10 @@ public interface DeviceRepository {
      * beginning; the cursor only ever moves forward.
      */
     PageResult<ProvisionedDevice> findProvisionedDevices(Instant since, UUID afterId, int limit);
+
+    /**
+     * Page of devices ordered by id, used by LocalEdge to pick telemetry targets without
+     * leaking the roster query shape.
+     */
+    PageResult<Device> findDevicesForTelemetry(int limit, boolean includeDeleted);
 }

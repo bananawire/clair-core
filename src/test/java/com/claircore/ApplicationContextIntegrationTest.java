@@ -9,7 +9,6 @@ import com.claircore.iam.domain.model.valueobjects.*;
 import com.claircore.iam.domain.repositories.UserRepository;
 import com.claircore.notifications.application.internal.outboundservices.email.EmailDeliveryService;
 import com.claircore.notifications.application.internal.outboundservices.push.PushNotificationDeliveryService;
-import com.claircore.shared.application.outboundservices.EdgeNotifier;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -35,7 +34,6 @@ class ApplicationContextIntegrationTest {
     @MockitoBean GoogleTokenVerifier verifier;
     @MockitoBean EmailDeliveryService email;
     @MockitoBean PushNotificationDeliveryService push;
-    @MockitoBean EdgeNotifier edge;
     @MockitoBean AnalyticsScheduler scheduler;
 
     @Test void existingGoogleLoginChangesSurviveReloadingFromTheDatabase() {

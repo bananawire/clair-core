@@ -3,9 +3,7 @@ package com.claircore.alerting.application.internal.queryservices;
 import com.claircore.alerting.application.internal.outboundservices.acl.ExternalAlertingDeviceService;
 import com.claircore.alerting.domain.model.aggregates.Alert;
 import com.claircore.alerting.domain.model.queries.GetAlertsByOwnerQuery;
-import com.claircore.alerting.domain.model.queries.GetPendingEdgeAlertsQuery;
 import com.claircore.alerting.domain.model.valueobjects.AlertSeverity;
-import com.claircore.alerting.domain.model.valueobjects.AlertStatus;
 import com.claircore.alerting.domain.model.valueobjects.MetricType;
 import com.claircore.alerting.domain.repositories.AlertRepository;
 import org.junit.jupiter.api.Test;
@@ -17,17 +15,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyCollection;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -43,46 +37,6 @@ class AlertQueryServiceImplTest {
     private AlertQueryServiceImpl service;
 
     private static final Instant OCCURRED_AT = Instant.parse("2026-05-16T22:30:00Z");
-
-    /** One batch call to the device facade for a whole page, not one per alert. */
-    @Test
-    void attachesHardwareIdsToPendingEdgeAlertsInOneBatchCall() {
-        UUID firstDevice = UUID.randomUUID();
-        UUID secondDevice = UUID.randomUUID();
-        var first = alert(firstDevice);
-        var second = alert(secondDevice);
-        when(alertRepository.findPendingForEdge(anyCollection(), isNull(), eq(200))).thenReturn(List.of(first, second));
-        when(externalDeviceService.fetchHardwareIdsByDeviceIds(List.of(firstDevice, secondDevice)))
-                .thenReturn(Map.of(firstDevice, "HW-0001", secondDevice, "HW-0002"));
-
-        var result = service.fetchPendingForEdge(new GetPendingEdgeAlertsQuery(null, 200));
-
-        assertThat(result).extracting(p -> p.hardwareId()).containsExactly("HW-0001", "HW-0002");
-        verify(externalDeviceService).fetchHardwareIdsByDeviceIds(List.of(firstDevice, secondDevice));
-    }
-
-    /** A device removed since the alert was raised has no hardware id, so the alert is dropped. */
-    @Test
-    void dropsAPendingAlertWhoseDeviceNoLongerResolves() {
-        UUID known = UUID.randomUUID();
-        UUID gone = UUID.randomUUID();
-        when(alertRepository.findPendingForEdge(anyCollection(), isNull(), eq(200)))
-                .thenReturn(List.of(alert(known), alert(gone)));
-        when(externalDeviceService.fetchHardwareIdsByDeviceIds(List.of(known, gone)))
-                .thenReturn(Map.of(known, "HW-0001"));
-
-        var result = service.fetchPendingForEdge(new GetPendingEdgeAlertsQuery(null, 200));
-
-        assertThat(result).singleElement().satisfies(p -> assertThat(p.hardwareId()).isEqualTo("HW-0001"));
-    }
-
-    @Test
-    void skipsTheFacadeEntirelyWhenNothingIsPending() {
-        when(alertRepository.findPendingForEdge(anyCollection(), isNull(), eq(200))).thenReturn(List.of());
-
-        assertThat(service.fetchPendingForEdge(new GetPendingEdgeAlertsQuery(null, 200))).isEmpty();
-        verifyNoInteractions(externalDeviceService);
-    }
 
     @Test
     void returnsAnEmptyPageWithoutQueryingWhenTheUserOwnsNoDevices() {

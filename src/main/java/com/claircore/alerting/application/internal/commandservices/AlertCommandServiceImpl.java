@@ -3,10 +3,7 @@ package com.claircore.alerting.application.internal.commandservices;
 import com.claircore.alerting.application.commandservices.AlertCommandService;
 import com.claircore.alerting.application.internal.outboundservices.acl.ExternalAlertingDeviceService;
 import com.claircore.alerting.application.internal.outboundservices.acl.ExternalAlertingThresholdService;
-import com.claircore.alerting.application.internal.outboundservices.edge.AlertIncidentsChangedPublisher;
 import com.claircore.alerting.domain.model.aggregates.Alert;
-import com.claircore.alerting.domain.model.commands.AcknowledgeEdgeAlertCommand;
-import com.claircore.alerting.domain.model.commands.RecordEdgeAlertReceiptCommand;
 import com.claircore.alerting.domain.model.commands.EvaluateTelemetryForAlertsCommand;
 import com.claircore.alerting.domain.model.valueobjects.AlertSeverity;
 import com.claircore.alerting.domain.model.valueobjects.AlertStatus;
@@ -14,6 +11,7 @@ import com.claircore.alerting.domain.model.valueobjects.MetricType;
 import com.claircore.alerting.domain.repositories.AlertRepository;
 import com.claircore.alerting.interfaces.events.AlertIncidentChangedIntegrationEvent;
 import com.claircore.device.interfaces.acl.ThresholdSummary;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +20,12 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Write-side service for the alerting bounded context. With the external edge integration
+ * retired, lifecycle events are now delivered to in-process consumers (e.g. notifications) by
+ * publishing a Spring {@link AlertIncidentChangedIntegrationEvent}; the previous edge webhook
+ * fan-out has been removed.
+ */
 @Service
 public class AlertCommandServiceImpl implements AlertCommandService {
 
@@ -30,18 +34,18 @@ public class AlertCommandServiceImpl implements AlertCommandService {
     private final AlertRepository alertRepository;
     private final ExternalAlertingThresholdService externalThresholdService;
     private final ExternalAlertingDeviceService externalDeviceService;
-    private final AlertIncidentsChangedPublisher alertIncidentsChangedPublisher;
+    private final ApplicationEventPublisher eventPublisher;
 
     public AlertCommandServiceImpl(
             AlertRepository alertRepository,
             ExternalAlertingThresholdService externalThresholdService,
             ExternalAlertingDeviceService externalDeviceService,
-            AlertIncidentsChangedPublisher alertIncidentsChangedPublisher
+            ApplicationEventPublisher eventPublisher
     ) {
         this.alertRepository = alertRepository;
         this.externalThresholdService = externalThresholdService;
         this.externalDeviceService = externalDeviceService;
-        this.alertIncidentsChangedPublisher = alertIncidentsChangedPublisher;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -101,64 +105,14 @@ public class AlertCommandServiceImpl implements AlertCommandService {
     }
 
     /**
-     * The ownership check comes first so an edge cannot learn the lifecycle state of an alert
-     * belonging to another hardware identity. The hardware id is resolved through the device facade;
-     * it used to come from a {@code JOIN Device} in alerting's own repository.
+     * Publishes a lifecycle event over the in-process bus. Notifications and other alerting
+     * listeners pick it up; the previous edge webhook fan-out is gone.
      */
-    @Override
-    @Transactional
-    public AcknowledgementOutcome handle(AcknowledgeEdgeAlertCommand command) {
-        return alertRepository.findByIdForAcknowledgement(command.alertId())
-                .map(alert -> acknowledgeLoaded(alert, command))
-                .orElse(AcknowledgementOutcome.NOT_FOUND);
-    }
-
-    private AcknowledgementOutcome acknowledgeLoaded(Alert alert, AcknowledgeEdgeAlertCommand command) {
-        boolean ownedByCaller = externalDeviceService.fetchHardwareIdByDeviceId(alert.getDeviceId())
-                .map(command.hardwareId()::equals)
-                .orElse(false);
-        if (!ownedByCaller) {
-            return AcknowledgementOutcome.NOT_FOUND;
-        }
-        if (alert.getStatus() == AlertStatus.ACKNOWLEDGED || alert.getStatus() == AlertStatus.RESOLVED) {
-            return AcknowledgementOutcome.CONFLICT;
-        }
-        if (alert.getStatus() != AlertStatus.ACTIVE) {
-            return AcknowledgementOutcome.NOT_FOUND;
-        }
-        alert.acknowledge();
-
-        alert.markTransition(alertRepository.nextTransitionSequence());
-
-        alertRepository.save(alert);
-
-        return AcknowledgementOutcome.OK;
-    }
-
-    /** Ownership first, as with the ACK, so a receipt from another unit learns nothing. */
-    @Override
-    @Transactional
-    public ReceiptOutcome handle(RecordEdgeAlertReceiptCommand command) {
-        return alertRepository.findByIdForAcknowledgement(command.alertId())
-                .map(alert -> {
-                    boolean ownedByCaller = externalDeviceService.fetchHardwareIdByDeviceId(alert.getDeviceId())
-                            .map(command.hardwareId()::equals)
-                            .orElse(false);
-                    if (!ownedByCaller) {
-                        return ReceiptOutcome.NOT_FOUND;
-                    }
-                    alert.recordEdgeReceipt(command.sequence());
-                    alertRepository.save(alert);
-                    return ReceiptOutcome.OK;
-                })
-                .orElse(ReceiptOutcome.NOT_FOUND);
-    }
-
     private void publishIncidentChanged(Alert alert) {
         String hardwareId = externalDeviceService.fetchHardwareIdByDeviceId(alert.getDeviceId())
                 .orElse(alert.getDeviceId().toString());
 
-        alertIncidentsChangedPublisher.publish(new AlertIncidentChangedIntegrationEvent(
+        eventPublisher.publishEvent(new AlertIncidentChangedIntegrationEvent(
                 alert.getId(),
                 alert.getDeviceId(),
                 hardwareId,
@@ -188,8 +142,7 @@ public class AlertCommandServiceImpl implements AlertCommandService {
                 actual.stripTrailingZeros().toPlainString(),
                 metric.unit(),
                 threshold.stripTrailingZeros().toPlainString(),
-                metric.unit()
-        );
+                metric.unit());
     }
 
     private static AlertSeverity calculateSeverity(BigDecimal actual, BigDecimal threshold) {

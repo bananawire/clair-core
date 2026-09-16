@@ -1,6 +1,5 @@
 package com.claircore.device.application.internal.commandservices;
 
-import com.claircore.device.application.internal.outboundservices.edge.DeviceCommandsPendingPublisher;
 import com.claircore.device.domain.model.commands.AcknowledgeDeviceCommandCommand;
 import com.claircore.device.domain.model.commands.CreateDeviceCommandCommand;
 import com.claircore.device.domain.model.commands.DispatchPendingDeviceCommandsCommand;
@@ -38,8 +37,13 @@ class DeviceControlCommandServiceImplTest {
     @Mock
     private com.claircore.device.domain.repositories.DeviceRepository deviceRepository;
 
-    @Mock
-    private DeviceCommandsPendingPublisher deviceCommandsPendingPublisher;
+    private DeviceControlCommandServiceImpl service() {
+        return new DeviceControlCommandServiceImpl(
+                deviceAssignmentRepository,
+                deviceCommandRepository,
+                deviceRepository
+        );
+    }
 
     @Test
     void shouldCreateDeviceCommandWhenDeviceBelongsToUser() {
@@ -52,12 +56,7 @@ class DeviceControlCommandServiceImplTest {
             return saved;
         });
 
-        DeviceCommand result = new DeviceControlCommandServiceImpl(
-                deviceAssignmentRepository,
-                deviceCommandRepository,
-                deviceRepository,
-                deviceCommandsPendingPublisher
-        ).handle(new CreateDeviceCommandCommand(
+        DeviceCommand result = service().handle(new CreateDeviceCommandCommand(
                 assignment.getDeviceId(),
                 DeviceCommandType.WAKE,
                 "{}",
@@ -77,8 +76,7 @@ class DeviceControlCommandServiceImplTest {
 
         assertThrowsExactly(
                 org.springframework.security.access.AccessDeniedException.class,
-                () -> new DeviceControlCommandServiceImpl(deviceAssignmentRepository, deviceCommandRepository, deviceRepository, deviceCommandsPendingPublisher)
-                        .handle(new CreateDeviceCommandCommand(
+                () -> service().handle(new CreateDeviceCommandCommand(
                                 assignment.getDeviceId(),
                                 DeviceCommandType.WAKE,
                                 "{}",
@@ -97,8 +95,7 @@ class DeviceControlCommandServiceImplTest {
                 .thenReturn(List.of(first, second));
         when(deviceCommandRepository.save(any(DeviceCommand.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        List<DeviceCommand> result = new DeviceControlCommandServiceImpl(deviceAssignmentRepository, deviceCommandRepository, deviceRepository, deviceCommandsPendingPublisher)
-                .handle(new DispatchPendingDeviceCommandsCommand(2));
+        List<DeviceCommand> result = service().handle(new DispatchPendingDeviceCommandsCommand(2));
 
         assertEquals(DeviceCommandStatus.SENT, result.get(0).getStatus());
         assertEquals(DeviceCommandStatus.SENT, result.get(1).getStatus());
@@ -115,8 +112,7 @@ class DeviceControlCommandServiceImplTest {
         when(deviceAssignmentRepository.findByDeviceIdForUpdate(assignment.getDeviceId())).thenReturn(Optional.of(assignment));
         when(deviceCommandRepository.save(any(DeviceCommand.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        DeviceCommand result = new DeviceControlCommandServiceImpl(deviceAssignmentRepository, deviceCommandRepository, deviceRepository, deviceCommandsPendingPublisher)
-                .handle(new AcknowledgeDeviceCommandCommand(assignment.getDeviceId(), command.getId(), DeviceCommandStatus.EXECUTED, null));
+        DeviceCommand result = service().handle(new AcknowledgeDeviceCommandCommand(assignment.getDeviceId(), command.getId(), DeviceCommandStatus.EXECUTED, null));
 
         assertEquals(DeviceCommandStatus.EXECUTED, result.getStatus());
         verify(deviceAssignmentRepository).save(assignment);
@@ -130,10 +126,9 @@ class DeviceControlCommandServiceImplTest {
         when(deviceCommandRepository.findByDeviceIdAndCommandId(current.getDeviceId(), stale.getId())).thenReturn(Optional.of(stale));
         when(deviceAssignmentRepository.findByDeviceIdForUpdate(current.getDeviceId())).thenReturn(Optional.of(current));
         assertThrowsExactly(IllegalStateException.class, () ->
-                new DeviceControlCommandServiceImpl(deviceAssignmentRepository, deviceCommandRepository, deviceRepository, deviceCommandsPendingPublisher)
-                        .handle(new AcknowledgeDeviceCommandCommand(current.getDeviceId(), stale.getId(), DeviceCommandStatus.EXECUTED, null)));
+                service().handle(new AcknowledgeDeviceCommandCommand(current.getDeviceId(), stale.getId(), DeviceCommandStatus.EXECUTED, null)));
         assertEquals(DeviceCommandStatus.EXPIRED, stale.getStatus());
-        assertEquals(com.claircore.device.domain.model.valueobjects.DeviceStatus.OFFLINE, current.getStatus());
+        assertEquals(DeviceStatus.OFFLINE, current.getStatus());
         verify(deviceAssignmentRepository, never()).save(any());
         verify(deviceCommandRepository).save(stale);
     }

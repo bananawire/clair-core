@@ -1,8 +1,6 @@
 package com.claircore.device.application.internal.commandservices;
 
-import com.claircore.device.interfaces.events.DeviceChangedIntegrationEvent;
 import com.claircore.device.application.internal.outboundservices.acl.ExternalBillingService;
-import com.claircore.device.application.internal.outboundservices.edge.ProvisioningDevicesChangedPublisher;
 import com.claircore.device.domain.model.commands.*;
 import com.claircore.device.domain.model.aggregates.Device;
 import com.claircore.device.domain.model.aggregates.DeviceAssignment;
@@ -18,8 +16,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.access.AccessDeniedException;
 
-import java.time.Instant;
 import java.security.SecureRandom;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -38,7 +36,6 @@ public class DeviceCommandServiceImpl implements DeviceCommandService {
     private final OrganizationRepository organizationRepository;
     private final ExternalBillingService externalBillingService;
     private final DeviceCommandRepository deviceCommandRepository;
-    private final ProvisioningDevicesChangedPublisher provisioningDevicesChangedPublisher;
 
     public DeviceCommandServiceImpl(
             DeviceRepository deviceRepository,
@@ -46,15 +43,13 @@ public class DeviceCommandServiceImpl implements DeviceCommandService {
             SpaceRepository spaceRepository,
             OrganizationRepository organizationRepository,
             ExternalBillingService externalBillingService,
-            DeviceCommandRepository deviceCommandRepository,
-            ProvisioningDevicesChangedPublisher provisioningDevicesChangedPublisher) {
+            DeviceCommandRepository deviceCommandRepository) {
         this.deviceRepository = deviceRepository;
         this.deviceAssignmentRepository = deviceAssignmentRepository;
         this.spaceRepository = spaceRepository;
         this.organizationRepository = organizationRepository;
         this.externalBillingService = externalBillingService;
         this.deviceCommandRepository = deviceCommandRepository;
-        this.provisioningDevicesChangedPublisher = provisioningDevicesChangedPublisher;
     }
 
     @Override
@@ -87,10 +82,7 @@ public class DeviceCommandServiceImpl implements DeviceCommandService {
                 ApiKey.generate(),
                 new DeviceType("air-quality-v1")
             );
-            Device savedDevice = deviceRepository.save(device);
-            // Notify edge so it can reconcile its provisioning cache.
-            publishDeviceChanged(savedDevice, DeviceStatus.OFFLINE.name(), "CREATED");
-            seeded.add(savedDevice);
+            seeded.add(deviceRepository.save(device));
         }
         return seeded;
     }
@@ -110,7 +102,6 @@ public class DeviceCommandServiceImpl implements DeviceCommandService {
                     new HardwareId(record.hardwareId()),
                     new ApiKey(record.apiKey()),
                     new DeviceType("air-quality-v1")));
-            publishDeviceChanged(saved, DeviceStatus.OFFLINE.name(), "CREATED");
             imported.add(saved);
         }
         return imported;
@@ -146,18 +137,10 @@ public class DeviceCommandServiceImpl implements DeviceCommandService {
 
         Optional<DeviceAssignment> existingAssignment = deviceAssignmentRepository.findByDeviceIdForUpdate(device.getId());
         if (existingAssignment.isPresent()) {
-            DeviceAssignment assignment = existingAssignment.get();
-            if (assignment.getOwnerUserId() != null) {
-                throw new IllegalStateException("Device already paired");
-            }
-
-            publishDeviceChanged(assignment, assignment.getStatus().name());
-            return assignment;
+            return existingAssignment.get();
         }
 
-        DeviceAssignment assignment = deviceAssignmentRepository.save(new DeviceAssignment(device.getId(), ClaimToken.generate()));
-        publishDeviceChanged(assignment, DeviceStatus.OFFLINE.name());
-        return assignment;
+        return deviceAssignmentRepository.save(new DeviceAssignment(device.getId(), ClaimToken.generate()));
     }
 
     @Override
@@ -180,36 +163,22 @@ public class DeviceCommandServiceImpl implements DeviceCommandService {
         }
 
         // Quota is enforced at the owner boundary, under a lock, before the token is consumed: a
-
-
         // failed claim rolls back and leaves the token usable.
-
 
         deviceAssignmentRepository.lockOwnerQuotaBoundary(command.userId());
 
-
         long owned = deviceAssignmentRepository.countByOwnerUserId(command.userId());
-
 
         int maxAllowed = externalBillingService.getMaxDevices(command.userId().userId());
 
-
         if (owned >= maxAllowed) {
-
-
             throw new IllegalStateException(
-
-
                 "Cannot claim device. User has " + owned + " devices, max allowed is " + maxAllowed);
-
-
         }
 
 
         assignment.claimToSpace(command.spaceId(), command.userId());
-        DeviceAssignment savedAssignment = deviceAssignmentRepository.save(assignment);
-        publishDeviceChanged(savedAssignment, savedAssignment.getStatus().name());
-        return savedAssignment;
+        return deviceAssignmentRepository.save(assignment);
     }
 
     @Override
@@ -229,9 +198,7 @@ public class DeviceCommandServiceImpl implements DeviceCommandService {
         deviceRepository.save(device);
 
         // Whatever was queued for the old owner is void; the edge learns the same from the roster's
-
         // assignment id and drops its own cached copies.
-
         deviceCommandRepository.expireOutstandingByAssignmentId(assignment.getId());
 
         deviceAssignmentRepository.deleteById(assignment.getId());
@@ -240,8 +207,6 @@ public class DeviceCommandServiceImpl implements DeviceCommandService {
             previousWatermark = device.getUpdatedAt();
         }
         deviceRepository.advanceRosterWatermark(device.getId(), previousWatermark);
-        // Reset/unlink is not a decommission. Keep the device cached on the edge.
-        publishDeviceChanged(device, DeviceStatus.OFFLINE.name(), "UPDATED");
     }
 
     @Override
@@ -258,9 +223,6 @@ public class DeviceCommandServiceImpl implements DeviceCommandService {
         Device device = requireDevice(assignment.getDeviceId());
         device.updateName(command.name());
         deviceRepository.save(device);
-
-        // Notify downstream consumers with the latest combined view.
-        publishDeviceChanged(assignment, assignment.getStatus().name());
     }
 
     @Override
@@ -300,28 +262,5 @@ public class DeviceCommandServiceImpl implements DeviceCommandService {
     private Device requireDevice(UUID deviceId) {
         return deviceRepository.findById(deviceId)
             .orElseThrow(() -> new IllegalArgumentException("Device not found"));
-    }
-
-    private void publishDeviceChanged(DeviceAssignment assignment, String status) {
-        Device device = requireDevice(assignment.getDeviceId());
-        provisioningDevicesChangedPublisher.publish(new DeviceChangedIntegrationEvent(
-                device.getId().toString(),
-                device.getHardwareId().value(),
-                device.getApiKey().value(),
-                status,
-                "UPDATED",
-                Instant.now().toString()
-        ));
-    }
-
-    private void publishDeviceChanged(Device device, String status, String changeType) {
-        provisioningDevicesChangedPublisher.publish(new DeviceChangedIntegrationEvent(
-                device.getId().toString(),
-                device.getHardwareId().value(),
-                device.getApiKey().value(),
-                status,
-                changeType,
-                Instant.now().toString()
-        ));
     }
 }

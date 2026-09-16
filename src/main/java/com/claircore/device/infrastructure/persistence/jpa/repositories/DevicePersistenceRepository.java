@@ -34,4 +34,18 @@ public interface DevicePersistenceRepository extends JpaRepository<DevicePersist
 
     boolean existsByHardwareId(HardwareId hardwareId);
 
+    /**
+     * Page of devices ordered by id, skipping tombstoned rows. Uses {@code PageRequest.of} to
+     * cap the page size and let the LocalEdge pull bounded batches in one query.
+     */
+    org.springframework.data.domain.Slice<DevicePersistenceEntity> findAllByDeletedFalseOrderByIdAsc(
+            org.springframework.data.domain.Pageable pageable);
+
+    /**
+     * Page of devices ordered by id, including tombstoned rows. Used by edge-style callers that
+     * want to reason about decommissions as part of the page result.
+     */
+    org.springframework.data.domain.Slice<DevicePersistenceEntity> findAllByOrderByIdAsc(
+            org.springframework.data.domain.Pageable pageable);
+
 }

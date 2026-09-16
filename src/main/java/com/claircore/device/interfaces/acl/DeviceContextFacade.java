@@ -62,4 +62,19 @@ public interface DeviceContextFacade {
      * Device IDs assigned to a space (bounded by limit) for read models.
      */
     List<UUID> findDeviceIdsBySpaceId(UUID spaceId, int limit);
+
+    /**
+     * Returns up to {@code limit} telemetry targets ordered by id, skipping deleted devices. The
+     * LocalEdge bounded context uses this for one cycle; the result never couples the caller to
+     * any aggregate the device BC owns internally.
+     *
+     * @param limit                hard cap on the page size; bounded to 1..500 by the implementation
+     * @param includeUnassigned    whether devices without an assignment are included
+     */
+    List<DeviceTelemetryTarget> findTelemetryTargets(int limit, boolean includeUnassigned);
+
+    /**
+     * Records one device presence event in occurrence order. Unknown strings are rejected.
+     */
+    void recordDevicePresence(java.util.UUID deviceId, String status, java.time.Instant occurredAt);
 }

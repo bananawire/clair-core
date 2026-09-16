@@ -1,7 +1,5 @@
 package com.claircore.device.application.internal.commandservices;
 
-import com.claircore.device.interfaces.events.DeviceCommandIssuedIntegrationEvent;
-import com.claircore.device.application.internal.outboundservices.edge.DeviceCommandsPendingPublisher;
 import com.claircore.device.domain.model.commands.AcknowledgeDeviceCommandCommand;
 import com.claircore.device.domain.model.commands.CreateDeviceCommandCommand;
 import com.claircore.device.domain.model.commands.DispatchPendingDeviceCommandsCommand;
@@ -16,27 +14,32 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.util.List;
 
+/**
+ * Issues STANDBY/WAKE/RESTART commands against a device and applies the acknowledgements that
+ * come back.
+ *
+ * <p>The previous implementation also fanned out to an edge webhook publisher; that integration
+ * is gone and the command lifecycle now stops at the in-app write side. The {@code Sent} status
+ * is preserved because the existing schema (and tests around it) depend on the field being set
+ * even though the literal "edge" target is no longer external.
+ */
 @Service
 public class DeviceControlCommandServiceImpl implements DeviceControlCommandService {
 
     private final DeviceAssignmentRepository deviceAssignmentRepository;
     private final DeviceCommandRepository deviceCommandRepository;
     private final DeviceRepository deviceRepository;
-    private final DeviceCommandsPendingPublisher deviceCommandsPendingPublisher;
 
     public DeviceControlCommandServiceImpl(
             DeviceAssignmentRepository deviceAssignmentRepository,
             DeviceCommandRepository deviceCommandRepository,
-            DeviceRepository deviceRepository,
-            DeviceCommandsPendingPublisher deviceCommandsPendingPublisher
+            DeviceRepository deviceRepository
     ) {
         this.deviceAssignmentRepository = deviceAssignmentRepository;
         this.deviceCommandRepository = deviceCommandRepository;
         this.deviceRepository = deviceRepository;
-        this.deviceCommandsPendingPublisher = deviceCommandsPendingPublisher;
     }
 
     @Override
@@ -52,23 +55,11 @@ public class DeviceControlCommandServiceImpl implements DeviceControlCommandServ
             throw new AccessDeniedException("Device does not belong to user");
         }
 
-        var device = deviceRepository.findById(assignment.getDeviceId())
-                .orElseThrow(() -> new IllegalArgumentException("Device not found"));
+        requireDevice(assignment.getDeviceId());
 
         DeviceCommand deviceCommand = new DeviceCommand(
                 assignment.getDeviceId(), assignment.getId(), command.type(), command.payload());
-        DeviceCommand saved = deviceCommandRepository.save(deviceCommand);
-
-        deviceCommandsPendingPublisher.publish(new DeviceCommandIssuedIntegrationEvent(
-                saved.getId().toString(),
-                device.getId().toString(),
-                device.getHardwareId().value(),
-                saved.getType().name(),
-                saved.getPayload(),
-                Instant.now().toString()
-        ));
-
-        return saved;
+        return deviceCommandRepository.save(deviceCommand);
     }
 
     @Override
@@ -112,5 +103,10 @@ public class DeviceControlCommandServiceImpl implements DeviceControlCommandServ
             case RESTART -> assignment.markOnline();
         }
         deviceAssignmentRepository.save(assignment);
+    }
+
+    private void requireDevice(java.util.UUID deviceId) {
+        deviceRepository.findById(deviceId)
+                .orElseThrow(() -> new IllegalArgumentException("Device not found"));
     }
 }

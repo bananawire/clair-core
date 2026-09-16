@@ -7,12 +7,14 @@ import com.claircore.device.domain.model.queries.GetSpaceByIdQuery;
 import com.claircore.device.domain.model.queries.GetOrganizationsByOwnerQuery;
 import com.claircore.device.domain.model.queries.GetSpacesByOrganizationQuery;
 import com.claircore.device.domain.model.queries.GetDevicesBySpaceQuery;
+import com.claircore.device.domain.model.queries.GetDevicesForTelemetryQuery;
 import com.claircore.device.domain.model.valueobjects.UserId;
 import com.claircore.device.domain.model.aggregates.DeviceAssignment;
 import com.claircore.device.application.queryservices.DeviceQueryService;
 import com.claircore.device.interfaces.acl.DeviceContextFacade;
 import com.claircore.device.interfaces.acl.OrganizationSummary;
 import com.claircore.device.interfaces.acl.SpaceSummary;
+import com.claircore.device.interfaces.acl.DeviceTelemetryTarget;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -134,5 +136,30 @@ public class DeviceContextFacadeImpl implements DeviceContextFacade {
         return deviceQueryService.handle(new GetDevicesBySpaceQuery(spaceId, 0, size)).items().stream()
                 .map(assigned -> assigned.device().getId())
                 .toList();
+    }
+
+    @Override
+    public List<DeviceTelemetryTarget> findTelemetryTargets(int limit, boolean includeUnassigned) {
+        int size = limit > 0 ? Math.min(limit, 500) : 50;
+        var page = deviceQueryService.handle(new GetDevicesForTelemetryQuery(size, includeUnassigned));
+        return page.items().stream()
+                .map(device -> new DeviceTelemetryTarget(
+                        device.getId(),
+                        device.getHardwareId().value(),
+                        device.getName(),
+                        deviceQueryService.findAssignmentByDeviceId(device.getId()).isPresent()))
+                .toList();
+    }
+
+    @Override
+    public void recordDevicePresence(UUID deviceId, String status, java.time.Instant occurredAt) {
+        com.claircore.device.domain.model.valueobjects.DeviceStatus parsed;
+        try {
+            parsed = com.claircore.device.domain.model.valueobjects.DeviceStatus.valueOf(status);
+        } catch (IllegalArgumentException | NullPointerException ex) {
+            throw new IllegalArgumentException("Unknown device status: " + status, ex);
+        }
+        java.time.Instant occurred = occurredAt != null ? occurredAt : java.time.Instant.now();
+        deviceQueryService.updatePresence(deviceId, parsed, occurred);
     }
 }

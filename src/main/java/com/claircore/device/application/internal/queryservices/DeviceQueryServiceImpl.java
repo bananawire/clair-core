@@ -43,12 +43,6 @@ public class DeviceQueryServiceImpl implements DeviceQueryService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageResult<com.claircore.device.domain.model.valueobjects.ProvisionedDevice> handle(GetDeviceRosterQuery query) {
-        return deviceRepository.findProvisionedDevices(query.since(), query.afterId(), query.limit());
-    }
-
-    @Override
-    @Transactional(readOnly = true)
     public Optional<Organization> handle(GetOrganizationByIdQuery query) {
         return organizationRepository.findById(query.organizationId());
     }
@@ -264,6 +258,27 @@ public class DeviceQueryServiceImpl implements DeviceQueryService {
     @Transactional(readOnly = true)
     public Optional<DeviceAssignment> findAssignmentByDeviceId(UUID deviceId) {
         return deviceAssignmentRepository.findByDeviceId(deviceId);
+    }
+
+    @Override
+    @Transactional
+    public Optional<DeviceAssignment> findAssignmentByDeviceIdForUpdate(UUID deviceId) {
+        return deviceAssignmentRepository.findByDeviceIdForUpdate(deviceId);
+    }
+
+    @Override
+    @Transactional
+    public void updatePresence(UUID deviceId, com.claircore.device.domain.model.valueobjects.DeviceStatus status, java.time.Instant occurredAt) {
+        DeviceAssignment assignment = deviceAssignmentRepository.findByDeviceIdForUpdate(deviceId)
+                .orElseThrow(() -> new IllegalArgumentException("Device assignment not found for " + deviceId));
+        assignment.updatePresence(status, occurredAt != null ? occurredAt : java.time.Instant.now());
+        deviceAssignmentRepository.save(assignment);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResult<Device> handle(GetDevicesForTelemetryQuery query) {
+        return deviceRepository.findDevicesForTelemetry(query.limit(), query.includeDeleted());
     }
 }
 

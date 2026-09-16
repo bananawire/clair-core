@@ -112,6 +112,19 @@ public class DeviceRepositoryImpl implements DeviceRepository {
     }
 
     @Override
+    public PageResult<Device> findDevicesForTelemetry(int limit, boolean includeDeleted) {
+        int capped = Math.max(1, Math.min(limit, 500));
+        var pageable = org.springframework.data.domain.PageRequest.of(0, capped);
+        var rows = includeDeleted
+                ? devicePersistenceRepository.findAllByOrderByIdAsc(pageable)
+                : devicePersistenceRepository.findAllByDeletedFalseOrderByIdAsc(pageable);
+        var devices = rows.getContent().stream()
+                .map(DevicePersistenceAssembler::toDomainFromPersistence)
+                .toList();
+        return new PageResult<>(devices, 0, capped, devices.size());
+    }
+
+    @Override
     public PageResult<ProvisionedDevice> findProvisionedDevices(Instant since, UUID afterId, int limit) {
         devicePersistenceRepository.flush();
         // Read JDBC values explicitly: interface projections stringify VOs and can reinterpret

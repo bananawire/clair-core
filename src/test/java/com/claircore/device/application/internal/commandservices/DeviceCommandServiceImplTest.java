@@ -1,7 +1,6 @@
 package com.claircore.device.application.internal.commandservices;
 
 import com.claircore.device.application.internal.outboundservices.acl.ExternalBillingService;
-import com.claircore.device.application.internal.outboundservices.edge.ProvisioningDevicesChangedPublisher;
 import com.claircore.device.domain.model.commands.ClaimDeviceCommand;
 import com.claircore.device.domain.model.commands.PairDeviceCommand;
 import com.claircore.device.domain.model.commands.ResetDeviceAssignmentCommand;
@@ -52,10 +51,6 @@ class DeviceCommandServiceImplTest {
     @Mock
     private com.claircore.device.domain.repositories.DeviceCommandRepository deviceCommandRepository;
 
-    @Mock
-    private ProvisioningDevicesChangedPublisher provisioningDevicesChangedPublisher;
-
-
     @InjectMocks
     private DeviceCommandServiceImpl service;
 
@@ -73,7 +68,6 @@ class DeviceCommandServiceImplTest {
 
         assertEquals(2, result.size());
         verify(deviceRepository, times(2)).save(any(Device.class));
-        verify(provisioningDevicesChangedPublisher, times(2)).publish(any());
     }
 
     @Test
@@ -96,7 +90,6 @@ class DeviceCommandServiceImplTest {
         assertEquals("CLAIR-0003", created.getFirst().getHardwareId().value());
         assertEquals("k3", created.getFirst().getApiKey().value());
         verify(deviceRepository, times(1)).save(any(Device.class));
-        verify(provisioningDevicesChangedPublisher, times(1)).publish(any());
     }
 
     @Test
@@ -162,7 +155,6 @@ class DeviceCommandServiceImplTest {
         assertEquals(spaceId, result.getSpaceId());
         assertEquals(new UserId(userId), result.getOwnerUserId());
         assertNotNull(result.getActivatedAt());
-        verify(provisioningDevicesChangedPublisher).publish(any());
     }
 
     @Test
@@ -224,7 +216,6 @@ class DeviceCommandServiceImplTest {
         order.verify(deviceAssignmentRepository).deleteById(assignment.getId());
         // The device row is never removed; a reset unlinks it, a decommission tombstones it.
         org.junit.jupiter.api.Assertions.assertFalse(device.isDeleted());
-        verify(provisioningDevicesChangedPublisher).publish(any());
     }
 
     private Device deviceWithId(UUID deviceId, String serialNumber, String hardwareId) {

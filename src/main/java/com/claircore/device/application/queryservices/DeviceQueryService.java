@@ -13,7 +13,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface DeviceQueryService {
-    PageResult<com.claircore.device.domain.model.valueobjects.ProvisionedDevice> handle(GetDeviceRosterQuery query);
     Optional<Organization> handle(GetOrganizationByIdQuery query);
     List<Organization> handle(GetOrganizationsByOwnerQuery query);
     Optional<Space> handle(GetSpaceByIdQuery query);
@@ -30,12 +29,19 @@ public interface DeviceQueryService {
     Optional<Device> handle(GetDeviceByApiKeyQuery query);
     PageResult<AssignedDevice> handle(GetDevicesBySpaceQuery query);
     List<Device> handle(GetProvisionedDevicesQuery query);
+    PageResult<Device> handle(GetDevicesForTelemetryQuery query);
     Optional<UUID> findSpaceIdByDeviceId(UUID deviceId);
     boolean isDeviceOwnedByUser(UUID deviceId, UUID userId);
     Optional<UUID> findOwnerIdByDeviceId(UUID deviceId);
     boolean isSpaceOwnedByUser(UUID spaceId, UUID userId);
     List<UUID> findDeviceIdsByOwnerId(UUID ownerUserId);
     Optional<DeviceAssignment> findAssignmentByDeviceId(UUID deviceId);
+
+    /**
+     * Pessimistic-locked variant used by presence writes: {@code LocalEdge} triggers one per
+     * simulated cycle and the lock prevents two concurrent updates from being reordered.
+     */
+    Optional<DeviceAssignment> findAssignmentByDeviceIdForUpdate(UUID deviceId);
     /** When the current owner claimed the device; empty while unclaimed. Older readings belong to a previous owner. */
     Optional<java.time.Instant> findActivatedAtByDeviceId(UUID deviceId);
 
@@ -60,4 +66,11 @@ public interface DeviceQueryService {
      * transaction.
      */
     record AssignedDevice(DeviceAssignment assignment, Device device) {}
+
+    /**
+     * Apply an occurrence-order presence event to the device's {@code DeviceAssignment}. The
+     * {@code LocalEdge} ACL publishes one of these per simulated reading; failures surface to
+     * the caller as a runtime exception.
+     */
+    void updatePresence(UUID deviceId, com.claircore.device.domain.model.valueobjects.DeviceStatus status, java.time.Instant occurredAt);
 }

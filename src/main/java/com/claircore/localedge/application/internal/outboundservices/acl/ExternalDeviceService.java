@@ -3,6 +3,8 @@ package com.claircore.localedge.application.internal.outboundservices.acl;
 import com.claircore.device.interfaces.acl.DeviceContextFacade;
 import com.claircore.device.interfaces.acl.DeviceTelemetryTarget;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -12,7 +14,8 @@ import java.util.UUID;
  * narrow surface instead of touching {@code DeviceRepository} or {@code DeviceAssignmentRepository}
  * directly, which keeps the BC isolation enforced.
  */
-@org.springframework.stereotype.Service
+@org.springframework.stereotype.Service("localedgeExternalDeviceService")
+@ConditionalOnProperty(name = "claircore.local-edge.enabled", havingValue = "true", matchIfMissing = false)
 public class ExternalDeviceService {
 
     private final DeviceContextFacade deviceContextFacade;

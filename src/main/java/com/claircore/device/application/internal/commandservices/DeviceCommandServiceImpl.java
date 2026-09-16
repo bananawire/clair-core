@@ -137,7 +137,14 @@ public class DeviceCommandServiceImpl implements DeviceCommandService {
 
         Optional<DeviceAssignment> existingAssignment = deviceAssignmentRepository.findByDeviceIdForUpdate(device.getId());
         if (existingAssignment.isPresent()) {
-            return existingAssignment.get();
+            DeviceAssignment assignment = existingAssignment.get();
+            // An unclaimed assignment (still waiting for the user to scan the QR) is safe to return:
+            // the edge just retried pairing before the claim flow finished. A claimed assignment
+            // means the device is already paired to someone and a fresh pairing is an error.
+            if (assignment.getOwnerUserId() != null) {
+                throw new IllegalStateException("Device is already paired");
+            }
+            return assignment;
         }
 
         return deviceAssignmentRepository.save(new DeviceAssignment(device.getId(), ClaimToken.generate()));

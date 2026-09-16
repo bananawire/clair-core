@@ -4,6 +4,7 @@ import com.claircore.evaluation.interfaces.acl.EvaluationContextFacade;
 import com.claircore.evaluation.interfaces.acl.TelemetryRecordingResult;
 import com.claircore.evaluation.interfaces.acl.TelemetrySubmission;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 /**
@@ -11,7 +12,8 @@ import org.springframework.stereotype.Service;
  * {@code TelemetrySubmission}s and never reads back; failed submissions are reported via the
  * {@link TelemetryRecordingResult} and the cycle outcome reflects them.
  */
-@Service
+@Service("localedgeExternalEvaluationService")
+@ConditionalOnProperty(name = "claircore.local-edge.enabled", havingValue = "true", matchIfMissing = false)
 public class ExternalEvaluationService {
 
     private final EvaluationContextFacade evaluationContextFacade;

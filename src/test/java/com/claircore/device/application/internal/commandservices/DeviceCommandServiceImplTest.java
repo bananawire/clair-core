@@ -109,7 +109,6 @@ class DeviceCommandServiceImplTest {
         when(deviceRepository.findByHardwareIdForUpdate("HW-0001")).thenReturn(Optional.of(existing));
         when(deviceAssignmentRepository.findByDeviceIdForUpdate(existing.getId())).thenReturn(Optional.empty());
         when(deviceAssignmentRepository.save(any(DeviceAssignment.class))).thenAnswer(i -> i.getArgument(0));
-        when(deviceRepository.findById(existing.getId())).thenReturn(Optional.of(existing));
 
         DeviceAssignment result = service.handle(new PairDeviceCommand("HW-0001"));
 
@@ -144,7 +143,6 @@ class DeviceCommandServiceImplTest {
         when(deviceAssignmentRepository.countByOwnerUserId(new UserId(userId))).thenReturn(0L);
         when(externalBillingService.getMaxDevices(userId)).thenReturn(3);
         when(deviceAssignmentRepository.save(any(DeviceAssignment.class))).thenAnswer(i -> i.getArgument(0));
-        when(deviceRepository.findById(device.getId())).thenReturn(Optional.of(device));
 
         DeviceAssignment result = service.handle(new ClaimDeviceCommand(
             assignment.getClaimToken().value(),

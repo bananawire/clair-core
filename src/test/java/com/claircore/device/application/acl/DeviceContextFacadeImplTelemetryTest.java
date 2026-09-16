@@ -8,7 +8,6 @@ import com.claircore.device.domain.model.valueobjects.ApiKey;
 import com.claircore.device.domain.model.valueobjects.DeviceStatus;
 import com.claircore.device.domain.model.valueobjects.DeviceType;
 import com.claircore.device.domain.model.valueobjects.HardwareId;
-import com.claircore.device.domain.model.valueobjects.UserId;
 import com.claircore.device.interfaces.acl.DeviceTelemetryTarget;
 import com.claircore.shared.domain.model.PageResult;
 
@@ -77,10 +76,7 @@ class DeviceContextFacadeImplTelemetryTest {
     @Test
     void recordDevicePresenceUpdatesTheAssignment() {
         UUID deviceId = UUID.randomUUID();
-        DeviceAssignment assignment = sampleAssignment(deviceId);
         Instant occurred = Instant.parse("2026-05-16T22:30:00Z");
-        when(deviceQueryService.findAssignmentByDeviceIdForUpdate(deviceId))
-                .thenReturn(Optional.of(assignment));
 
         var facade = new DeviceContextFacadeImpl(deviceQueryService);
         facade.recordDevicePresence(deviceId, "ONLINE", occurred);

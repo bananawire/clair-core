@@ -11,6 +11,7 @@ import com.claircore.shared.domain.model.PageResult;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -129,7 +130,15 @@ public class DeviceRepositoryImpl implements DeviceRepository {
         devicePersistenceRepository.flush();
         // Read JDBC values explicitly: interface projections stringify VOs and can reinterpret
         // CASE timestamp results in the JVM timezone instead of preserving the stored instant.
-        var cursor = (since != null ? since : CURSOR_START).atOffset(java.time.ZoneOffset.UTC);
+        // The cursor is rounded to microseconds because the column is `timestamp(6) with time
+        // zone`: an in-memory Instant can carry nanoseconds (e.g. 924869770Z) that H2 rounds up
+        // to 924870Z on disk. If we truncated instead, the cursor would lag behind the stored
+        // value and let a row at the boundary slip past the `> cursor` half of the WHERE clause
+        // and reappear on the next page.
+        var cursor = (since != null ? since : CURSOR_START)
+                .plusNanos(500L)
+                .truncatedTo(ChronoUnit.MICROS)
+                .atOffset(java.time.ZoneOffset.UTC);
         var id = afterId != null ? afterId : ID_CURSOR_START;
         var rows = jdbcTemplate.query("""
                 SELECT d.id, a.id AS assignment_id, d.hardware_id, d.api_key, coalesce(a.status, 'OFFLINE') AS status,

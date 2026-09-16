@@ -33,6 +33,8 @@ DB_PASSWORD=admin
 # Redis
 REDIS_HOST=localhost
 REDIS_PORT=6379
+REDIS_USERNAME=default
+REDIS_PASSWORD=your_redis_password
 
 # SMTP Email (Resend)
 SMTP_HOST=smtp.resend.com
@@ -40,26 +42,46 @@ SMTP_PORT=465
 SMTP_USERNAME=resend
 SMTP_PASSWORD=your_resend_api_key
 SMTP_FROM=noreply@yourdomain.com
+SMTP_AUTH=true
+SMTP_SSL=true
+SMTP_STARTTLS=false
 
 # JWT
 JWT_SECRET=your_super_secret_jwt_key_that_is_at_least_32_characters_long
 JWT_EXPIRATION=3600000
 JWT_REFRESH_EXPIRATION=604800000
 
-# Core -> Edge webhook (hint only; edge reconciles over HTTP)
-EDGE_WEBHOOK_URL=http://127.0.0.1:5000
-# Core -> Edge token (must match EDGE_TOKEN in edge)
-EDGE_TOKEN=change-me-long-random-secret
-# Edge -> Core token (must match EDGE_TO_CORE_TOKEN in edge)
-EDGE_TO_CORE_TOKEN=change-me-long-random-secret
-
 # CORS — tu web app Angular
 CORS_ALLOWED_ORIGINS=http://localhost:4200
+
+# Google OAuth 2.0
+GOOGLE_OAUTH_CLIENT_ID=your_google_client_id
+GOOGLE_OAUTH_ALLOWED_CLIENT_IDS=your_google_client_id
+GOOGLE_OAUTH_CLIENT_SECRET=your_google_client_secret
+GOOGLE_REDIRECT_URI=http://localhost:49220/api/v1/auth/google/callback
+
+# Frontend redirects
+FRONTEND_URL=http://localhost:4200
+
+# Stripe
+STRIPE_PRIVATE_KEY=sk_test_your_stripe_private_key
+STRIPE_PUBLIC_KEY=pk_test_your_stripe_public_key
+STRIPE_WEBHOOK_SECRET=whsec_your_stripe_webhook_secret
+
+# OneSignal
+ONESIGNAL_API_URL=https://onesignal.com/api/v1/notifications
+ONESIGNAL_REST_API_KEY=your_onesignal_rest_api_key
+ONESIGNAL_APP_ID=your_onesignal_app_id
+ONESIGNAL_FRONTEND_URL=http://localhost:4200
 
 # Factory inventory (optional). CSV columns: serial_number,hardware_id,api_key,name
 DEVICE_PROVISIONING_IMPORT_PATH=
 # Where the demo profile writes its generated inventory (contains API keys; keep it out of git)
 DEVICE_PROVISIONING_EXPORT_PATH=provisioned-devices.csv
+
+# Flyway
+FLYWAY_BASELINE_ON_MIGRATE=false
+LEGACY_AUDIT_ZONE=UTC
 ```
 
 ## Device inventory and the demo profile

@@ -1,39 +1,143 @@
 # ---------------------------------------------------------------------------
-# Spring Boot — Flyway configuration for clair-core.
+# Spring Boot — application configuration for clair-core.
 #
-# Project rule (see agents.md): one migration file per bounded context and one
-# seed file per feature. Migration files live under classpath:db/migration
-# (V__ versioned history + R__ repeatable canonical schema per BC). Seed files
-# live under classpath:db/seed (R__ repeatable feature seeds, idempotent via
-# ON CONFLICT DO NOTHING).
+# Secrets and deployment-specific values are loaded from .env by
+# ClairCoreApplication and referenced through the uppercase environment keys
+# below. Do not put real credentials in this file.
 # ---------------------------------------------------------------------------
 
 spring:
-  flyway:
-    # Versioned history (V1..V6) is the immutable baseline that built the
-    # schema. Repeatable migrations (R__<bc>.sql) re-run only when their
-    # checksum changes, which is the only way to honour "edit that file when
-    # the schema changes" without breaking Flyway's checksum validation on
-    # existing deployments.
-    locations: classpath:db/migration,classpath:db/seed
+  application:
+    name: clair-core
 
-    # Placeholder used by V2__audit_instants_and_device_integrity.sql to
-    # interpret legacy wall-clock audit timestamps written by the previous
-    # deployment. Defaults to UTC so empty databases migrate safely; existing
-    # installations must set LEGACY_AUDIT_ZONE (America/Lima in the original
-    # deployment) before the first Flyway run — see the README "Security
-    # Checklist for Production".
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 20000
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      leak-detection-threshold: 60000
+
+  flyway:
+    # Versioned history (V1..V7) and repeatable/seed files share the classpath
+    # locations so every bounded context is migrated consistently.
+    locations: classpath:db/migration,classpath:db/seed
     placeholders:
       legacyAuditZone: ${LEGACY_AUDIT_ZONE:UTC}
-
-    # Adopt existing phase-7 schemas without throwing on first run. Only
-    # enable during the one-shot cutover of a pre-Flyway installation; leave
-    # false on every other deployment.
     baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:false}
-
-    # Out-of-order migrations are rejected by default; honour that.
+    baseline-version: 1
     out-of-order: false
-
-    # Allow the same migration to be applied to multiple databases in
-    # parallel CI jobs without cross-talk.
     lock-retry-count: 50
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      username: ${REDIS_USERNAME:}
+      password: ${REDIS_PASSWORD:}
+
+  cache:
+    type: redis
+
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    protocol: smtp
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: ${SMTP_AUTH:false}
+          ssl:
+            enable: ${SMTP_SSL:false}
+          starttls:
+            enable: ${SMTP_STARTTLS:false}
+        debug: false
+
+# The mail adapter intentionally keeps this legacy uppercase property name.
+SMTP_FROM: ${SMTP_FROM:noreply@localhost}
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: ${JWT_EXPIRATION:3600000}
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+
+google:
+  oauth:
+    client-id: ${GOOGLE_OAUTH_CLIENT_ID}
+    allowed-client-ids: ${GOOGLE_OAUTH_ALLOWED_CLIENT_IDS:}
+    client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET}
+    redirect-uri: ${GOOGLE_REDIRECT_URI}
+
+frontend:
+  url: ${FRONTEND_URL}
+
+server:
+  port: ${PORT:49220}
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/plain
+    min-response-size: 1024
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      notificationService:
+        slidingWindowSize: 10
+        permittedNumberOfCallsInHalfOpenState: 3
+        slowCallRateThreshold: 50
+        slowCallDurationThreshold: 2s
+        failureRateThreshold: 50
+        waitDurationInOpenState: 20s
+      redisRepository:
+        slidingWindowSize: 20
+        permittedNumberOfCallsInHalfOpenState: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        slowCallRateThreshold: 50
+        slowCallDurationThreshold: 200ms
+  retry:
+    instances:
+      redisRepository:
+        maxAttempts: 3
+        waitDuration: 100ms
+
+stripe:
+  api:
+    key: ${STRIPE_PRIVATE_KEY}
+  public:
+    key: ${STRIPE_PUBLIC_KEY}
+  webhook:
+    secret: ${STRIPE_WEBHOOK_SECRET}
+
+onesignal:
+  api-url: ${ONESIGNAL_API_URL:https://onesignal.com/api/v1/notifications}
+  rest-api-key: ${ONESIGNAL_REST_API_KEY}
+  app-id: ${ONESIGNAL_APP_ID}
+  frontend-url: ${ONESIGNAL_FRONTEND_URL:http://localhost:4200}

@@ -1,5 +1,7 @@
 package com.claircore.bdd;
 
+import com.claircore.device.application.commandservices.DeviceCommandService;
+import com.claircore.device.domain.model.commands.ImportDevicesCommand;
 import com.claircore.iam.application.internal.outboundservices.acl.ExternalNotificationService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -14,6 +16,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.security.SecureRandom;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -45,6 +48,9 @@ public abstract class AbstractCucumberSteps {
 
     @Autowired
     protected ExternalNotificationService notifications;
+
+    @Autowired
+    protected DeviceCommandService deviceCommandService;
 
     static void resetState() {
         state = new ScenarioState();
@@ -152,11 +158,11 @@ public abstract class AbstractCucumberSteps {
     /** Plans are only upgraded through Stripe, which is mocked; the test data is arranged directly. */
     protected void assignPlan(UUID userId, String planType) {
         int updated = jdbc.update(
-                "UPDATE user_plan SET plan_type = ?, end_date = CURRENT_DATE + 30, updated_at = now() WHERE user_id = ?",
+                "UPDATE user_plan SET plan_type = ?, end_date = DATEADD('DAY', 30, CURRENT_DATE), updated_at = CURRENT_TIMESTAMP WHERE user_id = ?",
                 planType, userId);
         if (updated == 0) {
             jdbc.update("INSERT INTO user_plan (id, user_id, plan_type, start_date, end_date, created_at, updated_at) "
-                    + "VALUES (?, ?, ?, CURRENT_DATE, CURRENT_DATE + 30, now(), now())",
+                            + "VALUES (?, ?, ?, CURRENT_DATE, DATEADD('DAY', 30, CURRENT_DATE), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
                     UUID.randomUUID(), userId, planType);
         }
     }
@@ -178,7 +184,7 @@ public abstract class AbstractCucumberSteps {
         return response;
     }
 
-    /** Factory inventory is fixed by seeds; each scenario provisions its own unclaimed sensor. */
+    /** Each scenario provisions its own unclaimed sensor through the device command service. */
     protected String provisionFactoryDevice() {
         StringBuilder suffix = new StringBuilder();
         for (int i = 0; i < 4; i++) {
@@ -186,9 +192,9 @@ public abstract class AbstractCucumberSteps {
         }
         String hardwareId = "CLAIR-" + suffix;
         String unique = UUID.randomUUID().toString();
-        jdbc.update("INSERT INTO devices (id, serial_number, hardware_id, api_key, name, factory_name, device_type, "
-                        + "deleted, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'air-quality-v1', false, now(), now())",
-                UUID.randomUUID(), "SN-" + unique, hardwareId, "key-" + unique, "Sensor " + suffix, "Sensor " + suffix);
+        deviceCommandService.handle(new ImportDevicesCommand(List.of(
+                new ImportDevicesCommand.DeviceProvisioningRecord(
+                        "SN-" + unique, hardwareId, "key-" + unique, "Sensor " + suffix))));
         return hardwareId;
     }
 

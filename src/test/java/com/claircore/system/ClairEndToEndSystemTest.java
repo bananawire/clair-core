@@ -1,10 +1,14 @@
 package com.claircore.system;
 
 import com.claircore.billing.application.internal.outboundservices.payments.PaymentGateway;
+import com.claircore.device.application.commandservices.DeviceCommandService;
+import com.claircore.device.domain.model.commands.ImportDevicesCommand;
 import com.claircore.iam.application.internal.outboundservices.acl.ExternalNotificationService;
 import com.claircore.iam.application.internal.outboundservices.oauth.GoogleTokenExchange;
 import com.claircore.iam.application.internal.outboundservices.oauth.GoogleTokenVerifier;
+import com.claircore.notifications.application.internal.outboundservices.email.EmailDeliveryService;
 import com.claircore.notifications.application.internal.outboundservices.push.PushNotificationDeliveryService;
+import com.claircore.testsupport.HermeticHttpTestConfiguration;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
@@ -16,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -41,13 +46,14 @@ import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
 /**
- * One ordered journey through the running application: real Flyway schema (V1..V10), JWT security,
- * Redis-backed sessions and the IAM, Billing, Device, Evaluation, Alerting, Notifications and
+ * One ordered HTTP journey through the running application on H2: JWT security,
+ * in-memory sessions and the IAM, Billing, Device, Evaluation, Alerting, Notifications and
  * Analytics contexts.
  * Each step reuses what the previous one produced, so the class must run in declared order.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ActiveProfiles("system")
+@ActiveProfiles("it")
+@Import(HermeticHttpTestConfiguration.class)
 @TestMethodOrder(OrderAnnotation.class)
 @DisplayName("Clair Core – prueba de sistema del recorrido completo del usuario")
 class ClairEndToEndSystemTest {
@@ -77,6 +83,9 @@ class ClairEndToEndSystemTest {
     @MockitoBean
     PushNotificationDeliveryService pushNotificationDeliveryService;
 
+    @MockitoBean
+    EmailDeliveryService emailDeliveryService;
+
     @Autowired
     TestRestTemplate rest;
 
@@ -85,6 +94,9 @@ class ClairEndToEndSystemTest {
 
     @Autowired
     ObjectMapper objectMapper;
+
+    @Autowired
+    DeviceCommandService deviceCommandService;
 
     @Test
     @Order(1)
@@ -288,14 +300,14 @@ class ClairEndToEndSystemTest {
         }
     }
 
-    /** Factory inventory is fixed by seeds; the journey provisions its own unclaimed sensor. */
+    /** The journey provisions its own unclaimed sensor through the device command service. */
     private String provisionFactoryDevice() {
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 4).toUpperCase();
         String hardwareId = "CLAIR-" + suffix;
         String unique = UUID.randomUUID().toString();
-        jdbc.update("INSERT INTO devices (id, serial_number, hardware_id, api_key, name, factory_name, device_type, "
-                        + "deleted, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'air-quality-v1', false, now(), now())",
-                UUID.randomUUID(), "SN-" + unique, hardwareId, "key-" + unique, "Sensor " + suffix, "Sensor " + suffix);
+        deviceCommandService.handle(new ImportDevicesCommand(List.of(
+                new ImportDevicesCommand.DeviceProvisioningRecord(
+                        "SN-" + unique, hardwareId, "key-" + unique, "Sensor " + suffix))));
         return hardwareId;
     }
 

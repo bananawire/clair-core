@@ -338,17 +338,5 @@ java -jar target/clair-core-1.0.0.jar
 
 ## Verification
 
-`mvn clean verify` runs the unit tests, JPA tests, complete application-context test, and
-architecture rules. H2 tests use H2's dialect, with Flyway disabled.
-
-To include PostgreSQL migration and roster integration tests, point these variables at a
-**disposable test database** (the tests create and remove their own schemas):
-
-```sh
-export CLAIR_TEST_POSTGRES_URL=jdbc:postgresql://localhost:5432/clair_test
-export CLAIR_TEST_POSTGRES_USER=clair_test
-export CLAIR_TEST_POSTGRES_PASSWORD=clair_test
-mvn clean verify
-```
-
-CI supplies PostgreSQL 15 and runs these checks on every build.
+`mvn clean verify` runs the unit, integration, BDD and system suites on H2. Flyway stays off
+for those tests. CI runs the same command; it does not start PostgreSQL or Redis.

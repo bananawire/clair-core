@@ -54,7 +54,7 @@ class AssistantContextAssemblerTest {
 
         String prompt = assembler.buildSystemPrompt(USER_ID, AssistantLocale.EN, NOW);
 
-        assertThat(prompt).contains("Answer in English").contains("Devices: none registered yet.").contains("Active alerts: none.");
+        assertThat(prompt).contains("reply in English").contains("Devices: none registered yet.").contains("Active alerts: none.");
     }
 
     @Test
@@ -77,7 +77,7 @@ class AssistantContextAssemblerTest {
 
         verify(evaluationService).findLatestReading(DEVICE_ID, visibleSince);
         assertThat(prompt)
-                .contains("Answer in Spanish")
+                .contains("reply in Spanish")
                 .contains("- \"Sala\" in space \"Oficina\": CO2 1250 ppm, PM2.5 18.0 ug/m3")
                 .contains("Thresholds: CO2 1000.")
                 .contains("Active alerts (1):")

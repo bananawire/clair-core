@@ -19,13 +19,9 @@ import java.util.UUID;
 @Repository
 public class ConversationMessageRepositoryImpl implements ConversationMessageRepository {
 
-    /*
-     * A question and its answer are written in the same transaction, so their audit instants can
-     * tie. Role breaks the tie: USER sorts after ASSISTANT alphabetically, hence DESC to put the
-     * question first.
-     */
-    private static final Sort OLDEST_FIRST = Sort.by(Sort.Order.asc("createdAt"), Sort.Order.desc("role"));
-    private static final Sort NEWEST_FIRST = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.asc("role"));
+    /* Turns written in one transaction can share an audit instant, so order is the stored position. */
+    private static final Sort FIRST_TO_LAST = Sort.by(Sort.Direction.ASC, "position");
+    private static final Sort LAST_TO_FIRST = Sort.by(Sort.Direction.DESC, "position");
 
     private final ConversationMessagePersistenceRepository conversationMessagePersistenceRepository;
 
@@ -53,7 +49,7 @@ public class ConversationMessageRepositoryImpl implements ConversationMessageRep
 
     @Override
     public List<ConversationMessage> findByConversationId(UUID conversationId) {
-        return conversationMessagePersistenceRepository.findByConversationId(conversationId, OLDEST_FIRST).stream()
+        return conversationMessagePersistenceRepository.findByConversationId(conversationId, FIRST_TO_LAST).stream()
                 .map(ConversationMessagePersistenceAssembler::toDomainFromPersistence)
                 .toList();
     }
@@ -61,12 +57,12 @@ public class ConversationMessageRepositoryImpl implements ConversationMessageRep
     @Override
     public List<ConversationMessage> findRecentByConversationId(UUID conversationId, int limit) {
         if (limit <= 0) return List.of();
-        var newestFirst = conversationMessagePersistenceRepository
-                .findByConversationId(conversationId, PageRequest.of(0, limit, NEWEST_FIRST)).stream()
+        var lastFirst = conversationMessagePersistenceRepository
+                .findByConversationId(conversationId, PageRequest.of(0, limit, LAST_TO_FIRST)).stream()
                 .map(ConversationMessagePersistenceAssembler::toDomainFromPersistence)
                 .collect(ArrayList<ConversationMessage>::new, ArrayList::add, ArrayList::addAll);
-        Collections.reverse(newestFirst);
-        return List.copyOf(newestFirst);
+        Collections.reverse(lastFirst);
+        return List.copyOf(lastFirst);
     }
 
     @Override

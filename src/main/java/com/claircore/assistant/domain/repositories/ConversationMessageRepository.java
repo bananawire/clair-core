@@ -13,15 +13,15 @@ public interface ConversationMessageRepository {
 
     ConversationMessage save(ConversationMessage message);
 
-    /** Stores the messages in the given order, which is also the order they are read back in. */
+    /** Stores the messages; they are read back by position, not by insertion order. */
     List<ConversationMessage> saveAll(List<ConversationMessage> messages);
 
     Optional<ConversationMessage> findById(UUID messageId);
 
-    /** Oldest first: the order the conversation is displayed in. */
+    /** By position: the order the conversation is displayed in. */
     List<ConversationMessage> findByConversationId(UUID conversationId);
 
-    /** The newest {@code limit} messages of a conversation, returned oldest first. */
+    /** The last {@code limit} messages of a conversation, returned by position. */
     List<ConversationMessage> findRecentByConversationId(UUID conversationId, int limit);
 
     /** How many messages of {@code role} the user wrote at or after {@code since}. */

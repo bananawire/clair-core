@@ -22,6 +22,9 @@ public class ConversationMessagePersistenceEntity extends AuditableAbstractPersi
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
+    @Column(nullable = false)
+    private int position;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private MessageRole role;
@@ -54,6 +57,9 @@ public class ConversationMessagePersistenceEntity extends AuditableAbstractPersi
 
     public UUID getUserId() { return userId; }
     public void setUserId(UUID userId) { this.userId = userId; }
+
+    public int getPosition() { return position; }
+    public void setPosition(int position) { this.position = position; }
 
     public MessageRole getRole() { return role; }
     public void setRole(MessageRole role) { this.role = role; }

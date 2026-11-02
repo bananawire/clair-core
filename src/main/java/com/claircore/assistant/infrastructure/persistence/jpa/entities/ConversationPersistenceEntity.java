@@ -22,6 +22,9 @@ public class ConversationPersistenceEntity extends AuditableAbstractPersistenceE
     @Column(name = "last_message_at", nullable = false)
     private Instant lastMessageAt;
 
+    @Column(name = "message_count", nullable = false)
+    private int messageCount;
+
     public ConversationPersistenceEntity() {
         // JPA, and the persistence assembler
     }
@@ -34,4 +37,7 @@ public class ConversationPersistenceEntity extends AuditableAbstractPersistenceE
 
     public Instant getLastMessageAt() { return lastMessageAt; }
     public void setLastMessageAt(Instant lastMessageAt) { this.lastMessageAt = lastMessageAt; }
+
+    public int getMessageCount() { return messageCount; }
+    public void setMessageCount(int messageCount) { this.messageCount = messageCount; }
 }

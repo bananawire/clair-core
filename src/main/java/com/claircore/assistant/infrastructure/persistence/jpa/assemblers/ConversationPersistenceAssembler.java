@@ -15,6 +15,7 @@ public final class ConversationPersistenceAssembler {
                 entity.getUserId(),
                 entity.getTitle(),
                 entity.getLastMessageAt(),
+                entity.getMessageCount(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt());
     }
@@ -26,6 +27,7 @@ public final class ConversationPersistenceAssembler {
         entity.setUserId(conversation.getUserId());
         entity.setTitle(conversation.getTitle());
         entity.setLastMessageAt(conversation.getLastMessageAt());
+        entity.setMessageCount(conversation.getMessageCount());
         // Null timestamps are what mark the entity as new (see AuditableAbstractPersistenceEntity).
         entity.setCreatedAt(conversation.getCreatedAt());
         entity.setUpdatedAt(conversation.getUpdatedAt());

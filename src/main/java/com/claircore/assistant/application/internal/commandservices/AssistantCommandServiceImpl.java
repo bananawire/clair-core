@@ -88,10 +88,11 @@ public class AssistantCommandServiceImpl implements AssistantCommandService {
 
         LanguageModelReply reply = languageModelClient.complete(prompt);
 
-        var question = ConversationMessage.user(conversation.getId(), command.userId(), command.content());
-        var answer = ConversationMessage.assistant(conversation.getId(), command.userId(), reply.content(),
-                reply.model(), reply.promptTokens(), reply.completionTokens(), reply.latencyMs());
-        conversation.recordActivity(now);
+        int questionPosition = conversation.recordExchange(now);
+        var question = ConversationMessage.user(
+                conversation.getId(), command.userId(), questionPosition, command.content());
+        var answer = ConversationMessage.assistant(conversation.getId(), command.userId(), questionPosition + 1,
+                reply.content(), reply.model(), reply.promptTokens(), reply.completionTokens(), reply.latencyMs());
 
         List<ConversationMessage> stored = transactionTemplate.execute(status -> {
             conversationRepository.save(conversation);

@@ -14,6 +14,7 @@ public final class ConversationMessagePersistenceAssembler {
                 entity.getId(),
                 entity.getConversationId(),
                 entity.getUserId(),
+                entity.getPosition(),
                 entity.getRole(),
                 entity.getContent(),
                 entity.getModel(),
@@ -31,6 +32,7 @@ public final class ConversationMessagePersistenceAssembler {
         entity.setId(message.getId());
         entity.setConversationId(message.getConversationId());
         entity.setUserId(message.getUserId());
+        entity.setPosition(message.getPosition());
         entity.setRole(message.getRole());
         entity.setContent(message.getContent());
         entity.setModel(message.getModel());

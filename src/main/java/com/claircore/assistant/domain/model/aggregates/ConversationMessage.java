@@ -17,6 +17,7 @@ public class ConversationMessage {
     private final UUID id;
     private final UUID conversationId;
     private final UUID userId;
+    private final int position;
     private final MessageRole role;
     private final String content;
     private final String model;
@@ -31,6 +32,7 @@ public class ConversationMessage {
             UUID id,
             UUID conversationId,
             UUID userId,
+            int position,
             MessageRole role,
             String content,
             String model,
@@ -43,6 +45,7 @@ public class ConversationMessage {
         if (id == null) throw new IllegalArgumentException("Id is required");
         if (conversationId == null) throw new IllegalArgumentException("Conversation ID is required");
         if (userId == null) throw new IllegalArgumentException("User ID is required");
+        if (position < 0) throw new IllegalArgumentException("Position must not be negative");
         if (role == null) throw new IllegalArgumentException("Role is required");
         if (content == null || content.isBlank()) throw new IllegalArgumentException("Content is required");
         if (role == MessageRole.USER && content.length() > CONTENT_MAX_LENGTH) {
@@ -54,6 +57,7 @@ public class ConversationMessage {
         this.id = id;
         this.conversationId = conversationId;
         this.userId = userId;
+        this.position = position;
         this.role = role;
         this.content = content;
         this.model = model;
@@ -65,14 +69,16 @@ public class ConversationMessage {
         this.updatedAt = updatedAt;
     }
 
-    public static ConversationMessage user(UUID conversationId, UUID userId, String content) {
-        return new ConversationMessage(UUID.randomUUID(), conversationId, userId, MessageRole.USER,
+    /** @param position order within the conversation, from {@link Conversation#recordExchange} */
+    public static ConversationMessage user(UUID conversationId, UUID userId, int position, String content) {
+        return new ConversationMessage(UUID.randomUUID(), conversationId, userId, position, MessageRole.USER,
                 content == null ? null : content.strip(), null, null, null, null, null, null, null);
     }
 
-    public static ConversationMessage assistant(UUID conversationId, UUID userId, String content, String model,
-                                                Integer promptTokens, Integer completionTokens, Integer latencyMs) {
-        return new ConversationMessage(UUID.randomUUID(), conversationId, userId, MessageRole.ASSISTANT,
+    public static ConversationMessage assistant(UUID conversationId, UUID userId, int position, String content,
+                                                String model, Integer promptTokens, Integer completionTokens,
+                                                Integer latencyMs) {
+        return new ConversationMessage(UUID.randomUUID(), conversationId, userId, position, MessageRole.ASSISTANT,
                 content == null ? null : content.strip(), model, promptTokens, completionTokens, latencyMs,
                 null, null, null);
     }
@@ -82,6 +88,7 @@ public class ConversationMessage {
             UUID id,
             UUID conversationId,
             UUID userId,
+            int position,
             MessageRole role,
             String content,
             String model,
@@ -91,7 +98,7 @@ public class ConversationMessage {
             FeedbackRating feedback,
             Instant createdAt,
             Instant updatedAt) {
-        return new ConversationMessage(id, conversationId, userId, role, content, model, promptTokens,
+        return new ConversationMessage(id, conversationId, userId, position, role, content, model, promptTokens,
                 completionTokens, latencyMs, feedback, createdAt, updatedAt);
     }
 
@@ -113,6 +120,7 @@ public class ConversationMessage {
     public UUID getId() { return id; }
     public UUID getConversationId() { return conversationId; }
     public UUID getUserId() { return userId; }
+    public int getPosition() { return position; }
     public MessageRole getRole() { return role; }
     public String getContent() { return content; }
     public String getModel() { return model; }

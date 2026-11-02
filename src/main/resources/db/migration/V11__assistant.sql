@@ -20,6 +20,7 @@ CREATE TABLE assistant_conversations (
     user_id          uuid                        NOT NULL,
     title            varchar(80)                 NOT NULL,
     last_message_at  timestamp(6) with time zone NOT NULL,
+    message_count    integer                     NOT NULL DEFAULT 0,
     created_at       timestamp(6) with time zone NOT NULL,
     updated_at       timestamp(6) with time zone NOT NULL,
     PRIMARY KEY (id)
@@ -32,6 +33,7 @@ CREATE TABLE assistant_messages (
     id                 uuid                        NOT NULL,
     conversation_id    uuid                        NOT NULL,
     user_id            uuid                        NOT NULL,
+    position           integer                     NOT NULL,
     role               varchar(16)                 NOT NULL,
     content            TEXT                        NOT NULL,
     model              varchar(64),
@@ -48,8 +50,10 @@ CREATE TABLE assistant_messages (
     CONSTRAINT ck_assistant_messages_feedback CHECK (feedback IS NULL OR feedback IN ('UP', 'DOWN'))
 );
 
-CREATE INDEX idx_assistant_messages_conversation
-    ON assistant_messages (conversation_id, created_at);
+-- Turns of one transaction can share created_at, so a conversation is ordered
+-- by position; the unique index also rejects two writers claiming one slot.
+CREATE UNIQUE INDEX uk_assistant_messages_conversation_position
+    ON assistant_messages (conversation_id, position);
 
 -- Daily quota: COUNT(*) WHERE user_id = ? AND role = 'USER' AND created_at >= ?
 CREATE INDEX idx_assistant_messages_user_role_created

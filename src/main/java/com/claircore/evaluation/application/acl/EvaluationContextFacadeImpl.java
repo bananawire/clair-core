@@ -50,6 +50,18 @@ public class EvaluationContextFacadeImpl implements EvaluationContextFacade {
     }
 
     @Override
+    public Optional<TelemetryReading> getLatestReading(UUID deviceId, Instant visibleSince) {
+        return telemetryEvaluationQueryService.handle(new GetLatestEvaluationByDeviceQuery(deviceId, visibleSince))
+                .map(e -> new TelemetryReading(
+                        e.getDeviceId().value(),
+                        e.getAirQuality().co2(),
+                        e.getParticulateMatter().pm2_5(),
+                        e.getAirQuality().temperature(),
+                        e.getAirQuality().humidity(),
+                        e.getRecordedAt()));
+    }
+
+    @Override
     public List<HourlyTelemetryAverage> getHourlyTelemetryAggregation(Instant start, Instant end) {
         return telemetryEvaluationQueryService.handle(new GetHourlyTelemetryAveragesQuery(start, end)).stream()
                 .map(row -> new HourlyTelemetryAverage(

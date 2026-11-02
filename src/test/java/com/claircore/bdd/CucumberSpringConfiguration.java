@@ -1,5 +1,6 @@
 package com.claircore.bdd;
 
+import com.claircore.assistant.application.internal.outboundservices.llm.LanguageModelClient;
 import com.claircore.billing.application.internal.outboundservices.payments.PaymentGateway;
 import com.claircore.iam.application.internal.outboundservices.acl.ExternalNotificationService;
 import com.claircore.iam.application.internal.outboundservices.oauth.GoogleTokenExchange;
@@ -25,7 +26,7 @@ import static org.mockito.Mockito.reset;
 
 /**
  * Boots Clair Core on a random port against H2. Sessions stay in memory; Stripe, Google,
- * IAM mail and OneSignal push are mocked.
+ * IAM mail, OneSignal push and the DeepSeek language model are mocked.
  */
 @CucumberContextConfiguration
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -51,6 +52,9 @@ public class CucumberSpringConfiguration {
     @MockitoBean
     EmailDeliveryService emailDeliveryService;
 
+    @MockitoBean
+    LanguageModelClient languageModelClient;
+
     @Autowired
     JdbcTemplate jdbcTemplate;
 
@@ -64,7 +68,8 @@ public class CucumberSpringConfiguration {
     public void resetScenarioState() {
         AbstractCucumberSteps.resetState();
         reset(paymentGateway, googleTokenVerifier, googleTokenExchange,
-                externalNotificationService, pushNotificationDeliveryService, emailDeliveryService);
+                externalNotificationService, pushNotificationDeliveryService, emailDeliveryService,
+                languageModelClient);
     }
 
     @After

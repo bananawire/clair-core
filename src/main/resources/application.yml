@@ -171,3 +171,9 @@ deepseek:
   model: ${DEEPSEEK_MODEL:deepseek-flash}
   max-tokens: ${DEEPSEEK_MAX_TOKENS:600}
   temperature: ${DEEPSEEK_TEMPERATURE:0.3}
+
+assistant:
+  # The daily quota resets at local midnight in this zone.
+  time-zone: ${ASSISTANT_TIME_ZONE:America/Lima}
+  history-window: 10
+  max-context-devices: 10

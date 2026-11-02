@@ -1,5 +1,5 @@
 # language: es
-@WS-US-57 @WS-US-58 @WS-US-59
+@WS-US-57 @WS-US-58 @WS-US-59 @WS-US-60
 Característica: Asistente IA de calidad del aire
   Como usuario de Clair
   Quiero preguntarle a un asistente por el aire de mis espacios

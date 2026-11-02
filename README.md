@@ -85,6 +85,11 @@ ONESIGNAL_REST_API_KEY=your_onesignal_rest_api_key
 ONESIGNAL_APP_ID=your_onesignal_app_id
 ONESIGNAL_FRONTEND_URL=http://localhost:4200
 
+# DeepSeek (AI assistant; an empty key disables it)
+DEEPSEEK_API_KEY=
+DEEPSEEK_API_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-flash
+
 # Factory inventory (optional). CSV columns: serial_number,hardware_id,api_key,name
 DEVICE_PROVISIONING_IMPORT_PATH=
 # Where the demo profile writes its generated inventory (contains API keys; keep it out of git)

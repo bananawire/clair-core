@@ -136,6 +136,13 @@ resilience4j:
         waitDurationInOpenState: 10s
         slowCallRateThreshold: 50
         slowCallDurationThreshold: 200ms
+      deepseek:
+        slidingWindowSize: 10
+        permittedNumberOfCallsInHalfOpenState: 2
+        failureRateThreshold: 50
+        slowCallDurationThreshold: 20s
+        slowCallRateThreshold: 80
+        waitDurationInOpenState: 30s
   retry:
     instances:
       redisRepository:
@@ -155,3 +162,12 @@ onesignal:
   rest-api-key: ${ONESIGNAL_REST_API_KEY}
   app-id: ${ONESIGNAL_APP_ID}
   frontend-url: ${ONESIGNAL_FRONTEND_URL:http://localhost:4200}
+
+# AI assistant. The key stays on the backend only; an empty key makes the
+# assistant answer 503 instead of failing at startup.
+deepseek:
+  api-url: ${DEEPSEEK_API_URL:https://api.deepseek.com}
+  api-key: ${DEEPSEEK_API_KEY:}
+  model: ${DEEPSEEK_MODEL:deepseek-flash}
+  max-tokens: ${DEEPSEEK_MAX_TOKENS:600}
+  temperature: ${DEEPSEEK_TEMPERATURE:0.3}

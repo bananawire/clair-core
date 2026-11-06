@@ -1,8 +1,6 @@
 package com.claircore.nino.application.internal.commandservices;
 
-import com.claircore.assistant.application.internal.outboundservices.llm.LanguageModelClient;
-import com.claircore.assistant.application.internal.outboundservices.llm.LanguageModelReply;
-import com.claircore.assistant.domain.exceptions.AssistantUnavailableException;
+import com.claircore.nino.application.internal.outboundservices.acl.ExternalAssistantService;
 import com.claircore.nino.domain.model.valueobjects.HomeReadings;
 import com.claircore.nino.domain.model.valueobjects.NinoAlert;
 import org.junit.jupiter.api.Test;
@@ -10,23 +8,25 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Optional;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class NinoAlertServiceTest {
 
     @Mock
-    private LanguageModelClient languageModelClient;
+    private ExternalAssistantService externalAssistantService;
 
     @Test
     void returnsTheModelAnswerWhenTheModelReplies() {
-        when(languageModelClient.complete(anyList()))
-                .thenReturn(new LanguageModelReply("Vacía los baldes con agua hoy.", "deepseek-flash", 10, 12, 300));
+        when(externalAssistantService.complete(anyString(), anyString()))
+                .thenReturn(Optional.of("Vacía los baldes con agua hoy."));
 
-        NinoAlert alert = new NinoAlertService(languageModelClient).generate(HomeReadings.empty());
+        NinoAlert alert = new NinoAlertService(externalAssistantService).generate(HomeReadings.empty());
 
         assertEquals("Vacía los baldes con agua hoy.", alert.message());
         assertEquals(NinoAlert.SOURCE_MODEL, alert.source());
@@ -34,10 +34,9 @@ class NinoAlertServiceTest {
 
     @Test
     void returnsThePreWrittenAlertWhenTheModelIsUnavailable() {
-        when(languageModelClient.complete(anyList()))
-                .thenThrow(new AssistantUnavailableException("Assistant is not configured"));
+        when(externalAssistantService.complete(anyString(), anyString())).thenReturn(Optional.empty());
 
-        NinoAlert alert = new NinoAlertService(languageModelClient).generate(null);
+        NinoAlert alert = new NinoAlertService(externalAssistantService).generate(null);
 
         assertEquals(NinoAlertService.FALLBACK_MESSAGE, alert.message());
         assertEquals(NinoAlert.SOURCE_FALLBACK, alert.source());

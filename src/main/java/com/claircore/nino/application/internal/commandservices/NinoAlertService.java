@@ -1,14 +1,12 @@
 package com.claircore.nino.application.internal.commandservices;
 
-import com.claircore.assistant.application.internal.outboundservices.llm.LanguageModelClient;
-import com.claircore.assistant.application.internal.outboundservices.llm.LanguageModelMessage;
+import com.claircore.nino.application.internal.outboundservices.acl.ExternalAssistantService;
 import com.claircore.nino.domain.model.valueobjects.HomeReadings;
 import com.claircore.nino.domain.model.valueobjects.NinoAlert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -16,9 +14,10 @@ import java.util.concurrent.TimeUnit;
 /**
  * Turns a home's readings into a short El Niño alert written by the language model.
  *
- * <p>Reuses the assistant's {@link LanguageModelClient} so there is a single DeepSeek integration.
- * The model gets {@value #TIMEOUT_SECONDS} seconds; on any failure or timeout the caller still gets
- * a usable, pre-written alert marked {@code fallback}, so the demo never shows an error.
+ * <p>Reaches the assistant's language model through its published ACL, so there is a single
+ * DeepSeek integration. The model gets {@value #TIMEOUT_SECONDS} seconds; on any failure, empty
+ * answer or timeout the caller still gets a usable, pre-written alert marked {@code fallback}, so
+ * the demo never shows an error.
  */
 @Service
 public class NinoAlertService {
@@ -48,21 +47,22 @@ public class NinoAlertService {
             Termina exactamente con: "%s"
             """.formatted(OFFICIAL_SOURCES_NOTICE);
 
-    private final LanguageModelClient languageModelClient;
+    private final ExternalAssistantService externalAssistantService;
 
-    public NinoAlertService(LanguageModelClient languageModelClient) {
-        this.languageModelClient = languageModelClient;
+    public NinoAlertService(ExternalAssistantService externalAssistantService) {
+        this.externalAssistantService = externalAssistantService;
     }
 
     public NinoAlert generate(HomeReadings readings) {
-        var messages = List.of(
-                LanguageModelMessage.system(SYSTEM_PROMPT),
-                LanguageModelMessage.user(describe(readings == null ? HomeReadings.empty() : readings)));
+        String userMessage = describe(readings == null ? HomeReadings.empty() : readings);
         try {
-            String message = CompletableFuture
-                    .supplyAsync(() -> languageModelClient.complete(messages).content())
+            var answer = CompletableFuture
+                    .supplyAsync(() -> externalAssistantService.complete(SYSTEM_PROMPT, userMessage))
                     .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
-            return new NinoAlert(message, NinoAlert.SOURCE_MODEL);
+            if (answer.isEmpty() || answer.get().isBlank()) {
+                return fallback(new IllegalStateException("Language model unavailable"));
+            }
+            return new NinoAlert(answer.get(), NinoAlert.SOURCE_MODEL);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return fallback(e);

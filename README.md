@@ -146,6 +146,26 @@ Device and Evaluation bounded-context interfaces.
 `SMTP_AUTH`, `SMTP_SSL` and `SMTP_STARTTLS` control the mail transport in every profile. The full
 laptop runbook, including the edge and the device, is `docs/RUNBOOK.md`.
 
+## Local registration without email verification
+
+For disposable test accounts, explicitly set all three values in the core's `.env`:
+
+```env
+SPRING_PROFILES_ACTIVE=local
+SERVER_ADDRESS=127.0.0.1
+LOCAL_REGISTRATION_AUTO_CONFIRM=true
+```
+
+Restart the core after changing `.env`. Registration through `/api/v1/auth/sign-up`
+then creates an active account without sending mail and returns `verificationRequired: false`.
+The UI redirects to login instead of the verification-code page. Password rules and hashing
+still apply (for example, `Local123!` satisfies the rules); existing accounts are not changed.
+The configured database is still used: these settings do not provision an isolated local database.
+
+Auto-confirm is disabled by default. Startup refuses to enable it without the `local` profile,
+with `prod`/`production` active, or without an explicit loopback bind. Remove the flag to restore
+ordinary email verification. Do not enable this mode in production.
+
 ## Compile the Project
 
 ```bash

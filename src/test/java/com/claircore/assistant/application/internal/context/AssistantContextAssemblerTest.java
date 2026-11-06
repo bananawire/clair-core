@@ -12,8 +12,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.ClassPathResource;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +26,7 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -43,8 +48,9 @@ class AssistantContextAssemblerTest {
     private AssistantContextAssembler assembler;
 
     @BeforeEach
-    void setUp() {
-        assembler = new AssistantContextAssembler(deviceService, evaluationService, alertingService, 2);
+    void setUp() throws IOException {
+        assembler = new AssistantContextAssembler(deviceService, evaluationService, alertingService, 2,
+                new ClassPathResource("assistant/emergency-guide.txt"));
     }
 
     @Test
@@ -54,7 +60,54 @@ class AssistantContextAssemblerTest {
 
         String prompt = assembler.buildSystemPrompt(USER_ID, AssistantLocale.EN, NOW);
 
-        assertThat(prompt).contains("reply in English").contains("Devices: none registered yet.").contains("Active alerts: none.");
+        assertThat(prompt).startsWith("Eres el asistente de emergencia de Clair Niño.")
+                .contains("Devices: none registered yet.").contains("Active alerts: none.");
+    }
+
+    @Test
+    void interpolatesTheOfficialGuideIntoTheExactEmergencyRules() throws IOException {
+        String summary = new ClassPathResource("assistant/emergency-guide.txt")
+                .getContentAsString(StandardCharsets.UTF_8).strip();
+        String expectedRules = "Eres el asistente de emergencia de Clair Niño. Responde breve, en lenguaje simple, "
+                + "basándote solo en estas guías oficiales: " + summary + ". Cita la fuente (MINSA o INDECI). "
+                + "Si no está en las guías, dilo y recomienda seguir las alertas oficiales.";
+
+        String prompt = assembler.buildSystemPrompt(USER_ID, AssistantLocale.ES, NOW);
+
+        assertThat(prompt).startsWith(expectedRules + "\nCONTEXT (generated 2026-11-01T20:00:00Z)\n")
+                .doesNotContain("{resumen}", "You are the assistant of Clair", "References: CO2");
+        assertThat(summary.lines().count()).isBetween(10L, 15L);
+        assertThat(summary).contains("Fuente: MINSA. Publicación: 10 de febrero de 2026.",
+                "Fuente: MINSA. Publicación: 13 de febrero de 2026.",
+                "Fuente: MINSA / INS. Publicación: 6 de octubre de 2026.",
+                "Fuente: INDECI. Publicación: 29 de julio de 2019.",
+                "no te automediques", "no intentes darle agua", "primeras 24 horas");
+    }
+
+    @Test
+    void keepsTheEmergencyRulesForEitherLocale() {
+        assertThat(assembler.buildSystemPrompt(USER_ID, AssistantLocale.EN, NOW))
+                .isEqualTo(assembler.buildSystemPrompt(USER_ID, AssistantLocale.ES, NOW));
+    }
+
+    @Test
+    void injectsTheGuideLiterallyWithoutFormattingItsContents() throws IOException {
+        String summary = "MINSA: guía de prueba con 40% y {resumen}.";
+        var customAssembler = new AssistantContextAssembler(deviceService, evaluationService, alertingService, 2,
+                new ByteArrayResource(summary.getBytes(StandardCharsets.UTF_8)));
+
+        assertThat(customAssembler.buildSystemPrompt(USER_ID, AssistantLocale.ES, NOW))
+                .contains("guías oficiales: " + summary + ". Cita la fuente");
+    }
+
+    @Test
+    void refusesAnEmptyOrMissingGuide() {
+        assertThatThrownBy(() -> new AssistantContextAssembler(deviceService, evaluationService, alertingService, 2,
+                new ByteArrayResource(" \n".getBytes(StandardCharsets.UTF_8))))
+                .isInstanceOf(IllegalArgumentException.class).hasMessage("The emergency guide must not be empty");
+        assertThatThrownBy(() -> new AssistantContextAssembler(deviceService, evaluationService, alertingService, 2,
+                new ClassPathResource("assistant/missing-guide.txt")))
+                .isInstanceOf(IOException.class);
     }
 
     @Test
@@ -77,7 +130,7 @@ class AssistantContextAssemblerTest {
 
         verify(evaluationService).findLatestReading(DEVICE_ID, visibleSince);
         assertThat(prompt)
-                .contains("reply in Spanish")
+                .contains("Eres el asistente de emergencia de Clair Niño.")
                 .contains("- \"Sala\" in space \"Oficina\": CO2 1250 ppm, PM2.5 18.0 ug/m3")
                 .contains("Thresholds: CO2 1000.")
                 .contains("Active alerts (1):")

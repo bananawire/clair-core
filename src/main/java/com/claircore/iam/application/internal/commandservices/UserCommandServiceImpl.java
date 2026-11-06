@@ -27,13 +27,15 @@ public class UserCommandServiceImpl implements UserCommandService {
     private final AsyncNotificationService asyncNotificationService;
     private final ApplicationEventPublisher eventPublisher;
     private final SecureRandom secureRandom;
+    private final RegistrationPolicy registrationPolicy;
 
     public UserCommandServiceImpl(
             UserRepository userRepository,
             RegistrationSessionRepository registrationSessionRepository,
             PasswordEncoder passwordEncoder,
             AsyncNotificationService asyncNotificationService,
-            ApplicationEventPublisher eventPublisher
+            ApplicationEventPublisher eventPublisher,
+            RegistrationPolicy registrationPolicy
     ) {
         this.userRepository = userRepository;
         this.registrationSessionRepository = registrationSessionRepository;
@@ -41,6 +43,7 @@ public class UserCommandServiceImpl implements UserCommandService {
         this.asyncNotificationService = asyncNotificationService;
         this.eventPublisher = eventPublisher;
         this.secureRandom = new SecureRandom();
+        this.registrationPolicy = registrationPolicy;
     }
 
     @Override
@@ -63,6 +66,11 @@ public class UserCommandServiceImpl implements UserCommandService {
                 verificationCode,
                 30
         );
+
+        if (!registrationPolicy.emailVerificationRequired()) {
+            createActiveUser(session);
+            return Optional.of(session);
+        }
 
         registrationSessionRepository.save(session);
         asyncNotificationService.sendVerificationCode(emailAddress.address(), verificationCode.code());
@@ -90,19 +98,20 @@ public class UserCommandServiceImpl implements UserCommandService {
             throw new IllegalArgumentException("Email already registered");
         }
 
-        var user = new User(
-                emailAddress,
-                new Password(session.passwordHash())
-        );
-        user.activate();
-
-        var savedUser = userRepository.save(user);
-        eventPublisher.publishEvent(new UserRegisteredIntegrationEvent(savedUser.getId()));
+        var savedUser = createActiveUser(session);
 
         registrationSessionRepository.deleteById(command.sessionId());
         asyncNotificationService.sendWelcomeEmail(savedUser.getEmail().address());
 
         return Optional.of(savedUser);
+    }
+
+    private User createActiveUser(RegistrationSession session) {
+        var user = new User(session.email(), new Password(session.passwordHash()));
+        user.activate();
+        var savedUser = userRepository.save(user);
+        eventPublisher.publishEvent(new UserRegisteredIntegrationEvent(savedUser.getId()));
+        return savedUser;
     }
 
     private VerificationCode generateVerificationCode() {

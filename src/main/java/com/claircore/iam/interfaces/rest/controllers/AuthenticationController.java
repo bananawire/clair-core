@@ -1,6 +1,7 @@
 package com.claircore.iam.interfaces.rest.controllers;
 
 import com.claircore.iam.application.internal.commandservices.GoogleOAuthCallbackApplicationService;
+import com.claircore.iam.application.internal.commandservices.RegistrationPolicy;
 import com.claircore.iam.domain.model.commands.SignOutCommand;
 import com.claircore.iam.domain.model.queries.GetUserByEmailQuery;
 import com.claircore.iam.domain.model.valueobjects.EmailAddress;
@@ -50,6 +51,7 @@ public class AuthenticationController {
     private final GoogleOAuthCallbackApplicationService googleOAuthCallbackApplicationService;
     private final OAuthStateService oAuthStateService;
     private final PasswordEncoder passwordEncoder;
+    private final RegistrationPolicy registrationPolicy;
 
     private final String googleClientId;
     private final String googleClientSecret;
@@ -68,7 +70,8 @@ public class AuthenticationController {
             @Value("${google.oauth.client-id}") String googleClientId,
             @Value("${google.oauth.client-secret}") String googleClientSecret,
             @Value("${google.oauth.redirect-uri}") String googleRedirectUri,
-            @Value("${frontend.url}") String frontendUrl
+            @Value("${frontend.url}") String frontendUrl,
+            RegistrationPolicy registrationPolicy
     ) {
         this.userCommandService = userCommandService;
         this.userQueryService = userQueryService;
@@ -82,6 +85,7 @@ public class AuthenticationController {
         this.googleClientSecret = googleClientSecret;
         this.googleRedirectUri = googleRedirectUri;
         this.frontendUrl = frontendUrl;
+        this.registrationPolicy = registrationPolicy;
     }
 
     @PostMapping("/sign-up")
@@ -94,7 +98,8 @@ public class AuthenticationController {
         var command = InitiateRegistrationCommandFromRequestAssembler.toCommandFromRequest(request);
         var session = userCommandService.handle(command);
         if (session.isEmpty()) return ResponseEntity.badRequest().build();
-        var resource = RegistrationInitiatedResourceFromSessionAssembler.toResourceFromSession(session.get());
+        var resource = RegistrationInitiatedResourceFromSessionAssembler.toResourceFromSession(
+                session.get(), registrationPolicy.emailVerificationRequired());
         return new ResponseEntity<>(resource, HttpStatus.CREATED);
     }
 

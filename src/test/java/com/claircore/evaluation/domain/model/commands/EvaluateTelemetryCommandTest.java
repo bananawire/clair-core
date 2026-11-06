@@ -21,7 +21,7 @@ class EvaluateTelemetryCommandTest {
         // Arrange & Act
         EvaluateTelemetryCommand command = new EvaluateTelemetryCommand(
                 sampleDeviceId, sampleTime, 3600L, sampleAirQuality, samplePM,
-                sampleConnectivity, sampleLocation, 85, "STABLE", Instant.now()
+                Hydrology.absent(), PowerStatus.absent(), sampleConnectivity, sampleLocation, 85, "STABLE", Instant.now()
         );
 
         // Assert
@@ -35,7 +35,7 @@ class EvaluateTelemetryCommandTest {
     void shouldThrowExceptionWhenDeviceIdIsNull() {
         assertThatThrownBy(() -> new EvaluateTelemetryCommand(
                 null, sampleTime, 3600L, sampleAirQuality, samplePM,
-                sampleConnectivity, sampleLocation, 85, "STABLE", Instant.now()))
+                Hydrology.absent(), PowerStatus.absent(), sampleConnectivity, sampleLocation, 85, "STABLE", Instant.now()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Device ID must not be null");
     }
@@ -44,7 +44,7 @@ class EvaluateTelemetryCommandTest {
     void shouldThrowExceptionWhenUptimeIsNull() {
         assertThatThrownBy(() -> new EvaluateTelemetryCommand(
                 sampleDeviceId, sampleTime, null, sampleAirQuality, samplePM,
-                sampleConnectivity, sampleLocation, 85, "STABLE", Instant.now()))
+                Hydrology.absent(), PowerStatus.absent(), sampleConnectivity, sampleLocation, 85, "STABLE", Instant.now()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("uptime must not be null or negative");
     }
@@ -53,7 +53,7 @@ class EvaluateTelemetryCommandTest {
     void shouldThrowExceptionWhenUptimeIsNegative() {
         assertThatThrownBy(() -> new EvaluateTelemetryCommand(
                 sampleDeviceId, sampleTime, -1L, sampleAirQuality, samplePM,
-                sampleConnectivity, sampleLocation, 85, "STABLE", Instant.now()))
+                Hydrology.absent(), PowerStatus.absent(), sampleConnectivity, sampleLocation, 85, "STABLE", Instant.now()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("uptime must not be null or negative");
     }
@@ -62,7 +62,7 @@ class EvaluateTelemetryCommandTest {
     void shouldThrowExceptionWhenHealthStatusIsNegative() {
         assertThatThrownBy(() -> new EvaluateTelemetryCommand(
                 sampleDeviceId, sampleTime, 3600L, sampleAirQuality, samplePM,
-                sampleConnectivity, sampleLocation, -1, "STABLE", Instant.now()))
+                Hydrology.absent(), PowerStatus.absent(), sampleConnectivity, sampleLocation, -1, "STABLE", Instant.now()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("healthStatus must be between 0 and 100");
     }
@@ -71,7 +71,7 @@ class EvaluateTelemetryCommandTest {
     void shouldThrowExceptionWhenHealthStatusIsGreaterThan100() {
         assertThatThrownBy(() -> new EvaluateTelemetryCommand(
                 sampleDeviceId, sampleTime, 3600L, sampleAirQuality, samplePM,
-                sampleConnectivity, sampleLocation, 101, "STABLE", Instant.now()))
+                Hydrology.absent(), PowerStatus.absent(), sampleConnectivity, sampleLocation, 101, "STABLE", Instant.now()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("healthStatus must be between 0 and 100");
     }
@@ -80,7 +80,7 @@ class EvaluateTelemetryCommandTest {
     void shouldThrowExceptionWhenStatusIsNull() {
         assertThatThrownBy(() -> new EvaluateTelemetryCommand(
                 sampleDeviceId, sampleTime, 3600L, sampleAirQuality, samplePM,
-                sampleConnectivity, sampleLocation, 85, null, Instant.now()))
+                Hydrology.absent(), PowerStatus.absent(), sampleConnectivity, sampleLocation, 85, null, Instant.now()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("status must not be null or blank");
     }

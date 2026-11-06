@@ -8,7 +8,9 @@ import com.claircore.evaluation.domain.model.valueobjects.AirQuality;
 import com.claircore.evaluation.domain.model.valueobjects.Connectivity;
 import com.claircore.evaluation.domain.model.valueobjects.DeviceId;
 import com.claircore.evaluation.domain.model.valueobjects.Location;
+import com.claircore.evaluation.domain.model.valueobjects.Hydrology;
 import com.claircore.evaluation.domain.model.valueobjects.ParticulateMatter;
+import com.claircore.evaluation.domain.model.valueobjects.PowerStatus;
 import com.claircore.evaluation.interfaces.acl.TelemetryReading;
 
 import org.junit.jupiter.api.Test;
@@ -39,7 +41,7 @@ class EvaluationContextFacadeImplLatestReadingTest {
                 readingId, new DeviceId(deviceId), readingId, 0L,
                 new AirQuality(950.0, 24.5, 55.0),
                 new ParticulateMatter(5.0, 18.0, 25.0),
-                new Connectivity("ONLINE", "wifi", -50),
+                Hydrology.absent(), PowerStatus.absent(), new Connectivity("ONLINE", "wifi", -50),
                 new Location("Peru"),
                 95, "OK", recordedAt, recordedAt, recordedAt);
         when(queryService.handle(new GetLatestEvaluationByDeviceQuery(deviceId, visibleSince)))

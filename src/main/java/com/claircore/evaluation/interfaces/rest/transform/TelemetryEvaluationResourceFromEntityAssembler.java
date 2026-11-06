@@ -11,6 +11,8 @@ public final class TelemetryEvaluationResourceFromEntityAssembler {
     public static TelemetryEvaluationResource toResourceFromEntity(TelemetryEvaluation e) {
         var aq = e.getAirQuality();
         var pm = e.getParticulateMatter();
+        var hydro = e.getHydrology();
+        var power = e.getPowerStatus();
         var conn = e.getConnectivity();
         var loc = e.getLocation();
 
@@ -24,6 +26,12 @@ public final class TelemetryEvaluationResourceFromEntityAssembler {
                 ),
                 new TelemetryEvaluationResource.ParticulateMatterResource(
                         pm.pm1_0(), pm.pm2_5(), pm.pm10()
+                ),
+                new TelemetryEvaluationResource.HydrologyResource(
+                        hydro.rainfallMm(), hydro.waterLevelCm()
+                ),
+                new TelemetryEvaluationResource.PowerStatusResource(
+                        power.batteryPercent(), power.solarCharging()
                 ),
                 new TelemetryEvaluationResource.ConnectivityResource(
                         conn.status(),

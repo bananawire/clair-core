@@ -34,6 +34,8 @@ public class TelemetryEvaluationCommandServiceImpl implements TelemetryEvaluatio
                 command.uptime(),
                 command.airQuality(),
                 command.particulateMatter(),
+                command.hydrology(),
+                command.powerStatus(),
                 command.connectivity(),
                 command.location(),
                 command.healthStatus(),
@@ -48,6 +50,8 @@ public class TelemetryEvaluationCommandServiceImpl implements TelemetryEvaluatio
             if (!saved.getRecordedAt().equals(evaluation.getRecordedAt())
                     || !saved.getAirQuality().equals(evaluation.getAirQuality())
                     || !saved.getParticulateMatter().equals(evaluation.getParticulateMatter())
+                    || !saved.getHydrology().equals(evaluation.getHydrology())
+                    || !saved.getPowerStatus().equals(evaluation.getPowerStatus())
                     || !saved.getUptime().equals(evaluation.getUptime())
                     || !saved.getConnectivity().equals(evaluation.getConnectivity())
                     || !saved.getLocation().equals(evaluation.getLocation())

@@ -193,4 +193,46 @@ class SyntheticTelemetryGeneratorPolicyTest {
         }
         assertThat(max - min).as("seasonal swing over half a period").isGreaterThan(4.0);
     }
+
+    @Test
+    void hydrologyAndPowerFieldsArePresentAndInRange() {
+        SyntheticTelemetryGeneratorPolicy policy = new SyntheticTelemetryGeneratorPolicy(21L);
+        EnvironmentalTelemetry r = policy.generateOne(DEVICE_A, SimulationScenario.MIXED, NOW);
+        assertThat(r.rainfallMm()).isBetween(0.0, 1000.0);
+        assertThat(r.waterLevelCm()).isBetween(0.0, 10_000.0);
+        assertThat(r.batteryPercent()).isNotNull().isBetween(0.0, 100.0);
+    }
+
+    @Test
+    void rainCanRaiseWaterLevelOnALaterCycle() {
+        // HIGH_ONLY rains often; with the one-cycle runoff lag the water level should rise
+        // after rain has been observed at least once.
+        SyntheticTelemetryGeneratorPolicy policy = new SyntheticTelemetryGeneratorPolicy(77L);
+        double baseline = policy.generateOne(DEVICE_A, SimulationScenario.HIGH_ONLY, NOW).waterLevelCm();
+        boolean sawRain = false;
+        double peak = baseline;
+        for (int i = 1; i <= 80; i++) {
+            EnvironmentalTelemetry r = policy.generateOne(
+                    DEVICE_A, SimulationScenario.HIGH_ONLY, NOW.plusSeconds(15L * i));
+            if (r.rainfallMm() > 0.0) {
+                sawRain = true;
+            }
+            peak = Math.max(peak, r.waterLevelCm());
+        }
+        assertThat(sawRain).as("expected at least one wet cycle").isTrue();
+        assertThat(peak).as("lagged runoff should lift water level").isGreaterThan(baseline);
+    }
+
+    @Test
+    void nightTimeDoesNotSolarCharge() {
+        Instant night = Instant.parse("2026-05-16T05:00:00Z"); // 00:00 Peru (UTC-5)
+        SyntheticTelemetryGeneratorPolicy policy = new SyntheticTelemetryGeneratorPolicy(5L);
+        boolean anyCharging = false;
+        for (int i = 0; i < 20; i++) {
+            EnvironmentalTelemetry r = policy.generateOne(
+                    DEVICE_A, SimulationScenario.RECOMMENDED_ONLY, night.plusSeconds(15L * i));
+            anyCharging |= r.solarCharging();
+        }
+        assertThat(anyCharging).isFalse();
+    }
 }

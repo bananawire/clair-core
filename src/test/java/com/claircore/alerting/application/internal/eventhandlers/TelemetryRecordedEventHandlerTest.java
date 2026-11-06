@@ -66,6 +66,6 @@ class TelemetryRecordedEventHandlerTest {
     private static TelemetryRecordedIntegrationEvent event(UUID deviceId, Instant recordedAt) {
         return new TelemetryRecordedIntegrationEvent(
                 deviceId, 450.0, 23.5, 52.0, 5, 12, 25,
-                "connected", "Wokwi-GUEST", -65, "PERU", 100, "Optimal", 20L, "00000000-0000-0000-0000-000000000123", recordedAt);
+                0.0, 0.0, null, false, "connected", "Wokwi-GUEST", -65, "PERU", 100, "Optimal", 20L, "00000000-0000-0000-0000-000000000123", recordedAt);
     }
 }

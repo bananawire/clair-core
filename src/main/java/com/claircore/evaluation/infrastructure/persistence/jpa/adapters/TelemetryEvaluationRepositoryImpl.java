@@ -81,13 +81,17 @@ public class TelemetryEvaluationRepositoryImpl implements TelemetryEvaluationRep
         int inserted = jdbcTemplate.update("""
                 INSERT INTO telemetry_evaluations
                     (id, device_id, reading_id, uptime_seconds, aq_co2, aq_temperature, aq_humidity,
-                     pm_pm1_0, pm_pm2_5, pm_pm10, conn_status, conn_network, conn_signal_strength,
+                     pm_pm1_0, pm_pm2_5, pm_pm10, hydro_rainfall_mm, hydro_water_level_cm,
+                     pwr_battery_percent, pwr_solar_charging,
+                     conn_status, conn_network, conn_signal_strength,
                      location_country, health_status, status, recorded_at, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (device_id, reading_id) DO NOTHING
                 """, e.getId(), e.getDeviceId().value(), e.getReadingId(), e.getUptime(),
                 e.getAirQuality().co2(), e.getAirQuality().temperature(), e.getAirQuality().humidity(),
                 e.getParticulateMatter().pm1_0(), e.getParticulateMatter().pm2_5(), e.getParticulateMatter().pm10(),
+                e.getHydrology().rainfallMm(), e.getHydrology().waterLevelCm(),
+                e.getPowerStatus().batteryPercent(), e.getPowerStatus().solarCharging(),
                 e.getConnectivity().status(), e.getConnectivity().network(), e.getConnectivity().signalStrength(),
                 e.getLocation().country(), e.getHealthStatus(), e.getStatus(),
                 Timestamp.from(e.getRecordedAt()), Timestamp.from(receivedAt), Timestamp.from(receivedAt));

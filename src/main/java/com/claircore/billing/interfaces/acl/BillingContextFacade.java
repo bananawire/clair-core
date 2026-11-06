@@ -11,4 +11,8 @@ public interface BillingContextFacade {
     int getMaxDevices(UUID userId);
 
     boolean canAccessMonthlyReports(UUID userId);
+
+    int getAssistantDailyMessageLimit(UUID userId);
+
+    String getPlanName(UUID userId);
 }

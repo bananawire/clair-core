@@ -3,12 +3,16 @@ package com.claircore.evaluation.infrastructure.persistence.jpa.assemblers;
 import com.claircore.evaluation.domain.model.aggregates.TelemetryEvaluation;
 import com.claircore.evaluation.domain.model.valueobjects.AirQuality;
 import com.claircore.evaluation.domain.model.valueobjects.Connectivity;
+import com.claircore.evaluation.domain.model.valueobjects.Hydrology;
 import com.claircore.evaluation.domain.model.valueobjects.Location;
 import com.claircore.evaluation.domain.model.valueobjects.ParticulateMatter;
+import com.claircore.evaluation.domain.model.valueobjects.PowerStatus;
 import com.claircore.evaluation.infrastructure.persistence.jpa.embeddables.AirQualityPersistenceEmbeddable;
 import com.claircore.evaluation.infrastructure.persistence.jpa.embeddables.ConnectivityPersistenceEmbeddable;
+import com.claircore.evaluation.infrastructure.persistence.jpa.embeddables.HydrologyPersistenceEmbeddable;
 import com.claircore.evaluation.infrastructure.persistence.jpa.embeddables.LocationPersistenceEmbeddable;
 import com.claircore.evaluation.infrastructure.persistence.jpa.embeddables.ParticulateMatterPersistenceEmbeddable;
+import com.claircore.evaluation.infrastructure.persistence.jpa.embeddables.PowerStatusPersistenceEmbeddable;
 import com.claircore.evaluation.infrastructure.persistence.jpa.entities.TelemetryEvaluationPersistenceEntity;
 
 public final class TelemetryEvaluationPersistenceAssembler {
@@ -25,6 +29,8 @@ public final class TelemetryEvaluationPersistenceAssembler {
                 entity.getUptime(),
                 toDomain(entity.getAirQuality()),
                 toDomain(entity.getParticulateMatter()),
+                toDomain(entity.getHydrology()),
+                toDomain(entity.getPowerStatus()),
                 toDomain(entity.getConnectivity()),
                 toDomain(entity.getLocation()),
                 entity.getHealthStatus(),
@@ -43,6 +49,8 @@ public final class TelemetryEvaluationPersistenceAssembler {
         entity.setUptime(evaluation.getUptime());
         entity.setAirQuality(toPersistence(evaluation.getAirQuality()));
         entity.setParticulateMatter(toPersistence(evaluation.getParticulateMatter()));
+        entity.setHydrology(toPersistence(evaluation.getHydrology()));
+        entity.setPowerStatus(toPersistence(evaluation.getPowerStatus()));
         entity.setConnectivity(toPersistence(evaluation.getConnectivity()));
         entity.setLocation(toPersistence(evaluation.getLocation()));
         entity.setHealthStatus(evaluation.getHealthStatus());
@@ -62,6 +70,16 @@ public final class TelemetryEvaluationPersistenceAssembler {
         return e == null ? null : new ParticulateMatter(e.pm1_0(), e.pm2_5(), e.pm10());
     }
 
+    private static Hydrology toDomain(HydrologyPersistenceEmbeddable e) {
+        return e == null ? Hydrology.absent() : new Hydrology(e.rainfallMm(), e.waterLevelCm());
+    }
+
+    private static PowerStatus toDomain(PowerStatusPersistenceEmbeddable e) {
+        if (e == null) return PowerStatus.absent();
+        boolean charging = e.solarCharging() != null && e.solarCharging();
+        return new PowerStatus(e.batteryPercent(), charging);
+    }
+
     private static Connectivity toDomain(ConnectivityPersistenceEmbeddable e) {
         return e == null ? null : new Connectivity(e.status(), e.network(), e.signalStrength());
     }
@@ -76,6 +94,14 @@ public final class TelemetryEvaluationPersistenceAssembler {
 
     private static ParticulateMatterPersistenceEmbeddable toPersistence(ParticulateMatter vo) {
         return vo == null ? null : new ParticulateMatterPersistenceEmbeddable(vo.pm1_0(), vo.pm2_5(), vo.pm10());
+    }
+
+    private static HydrologyPersistenceEmbeddable toPersistence(Hydrology vo) {
+        return vo == null ? null : new HydrologyPersistenceEmbeddable(vo.rainfallMm(), vo.waterLevelCm());
+    }
+
+    private static PowerStatusPersistenceEmbeddable toPersistence(PowerStatus vo) {
+        return vo == null ? null : new PowerStatusPersistenceEmbeddable(vo.batteryPercent(), vo.solarCharging());
     }
 
     private static ConnectivityPersistenceEmbeddable toPersistence(Connectivity vo) {

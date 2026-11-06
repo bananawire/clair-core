@@ -133,6 +133,8 @@ public class AlertCommandServiceImpl implements AlertCommandService {
         map.put(MetricType.CO2, command.co2());
         map.put(MetricType.TEMPERATURE, command.temperature());
         map.put(MetricType.HUMIDITY, command.humidity());
+        map.put(MetricType.RAINFALL, command.rainfallMm());
+        map.put(MetricType.WATER_LEVEL, command.waterLevelCm());
         return map;
     }
 

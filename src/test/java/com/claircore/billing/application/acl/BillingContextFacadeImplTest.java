@@ -98,6 +98,39 @@ class BillingContextFacadeImplTest {
         verifyNoMoreInteractions(userPlanRepository);
     }
 
+    @Test
+    void shouldReturnPremiumAssistantLimitWhenPlanIsActive() {
+        UUID userId = UUID.fromString("550e8400-e29b-41d4-a716-446655440014");
+        UserPlan userPlan = new UserPlan(new UserId(userId));
+        userPlan.upgradeToPremium();
+        when(userPlanRepository.findByUserId(new UserId(userId))).thenReturn(Optional.of(userPlan));
+
+        assertThat(facade.getAssistantDailyMessageLimit(userId)).isEqualTo(100);
+        assertThat(facade.getPlanName(userId)).isEqualTo("PREMIUM");
+        verify(userPlanRepository, times(2)).findByUserId(new UserId(userId));
+    }
+
+    @Test
+    void shouldReturnFreemiumAssistantLimitWhenPremiumPlanIsExpired() {
+        UUID userId = UUID.fromString("550e8400-e29b-41d4-a716-446655440015");
+        UserPlan userPlan = new UserPlan(new UserId(userId));
+        userPlan.upgradeToPremium();
+        setEndDate(userPlan, LocalDate.now().minusDays(1));
+        when(userPlanRepository.findByUserId(new UserId(userId))).thenReturn(Optional.of(userPlan));
+
+        assertThat(facade.getAssistantDailyMessageLimit(userId)).isEqualTo(10);
+        assertThat(facade.getPlanName(userId)).isEqualTo("FREEMIUM");
+    }
+
+    @Test
+    void shouldReturnFreemiumAssistantLimitWhenUserPlanDoesNotExist() {
+        UUID userId = UUID.fromString("550e8400-e29b-41d4-a716-446655440016");
+        when(userPlanRepository.findByUserId(new UserId(userId))).thenReturn(Optional.empty());
+
+        assertThat(facade.getAssistantDailyMessageLimit(userId)).isEqualTo(10);
+        assertThat(facade.getPlanName(userId)).isEqualTo("FREEMIUM");
+    }
+
     private static void setEndDate(UserPlan userPlan, LocalDate endDate) {
         try {
             Field field = UserPlan.class.getDeclaredField("endDate");

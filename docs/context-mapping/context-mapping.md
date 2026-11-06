@@ -17,6 +17,7 @@ flowchart LR
     Billing(("Billing"))
     Evaluation(("Evaluation"))
     Notifications(("Notifications"))
+    Assistant(("Assistant"))
     Shared(("Shared Kernel"))
 
     %% Upstream -> Downstream relationships with ACL
@@ -35,6 +36,11 @@ flowchart LR
     IAM -->|"U -> D [ACL]"| Notifications
     Alerting -->|"U -> D [ACL]"| Notifications
 
+    Billing -->|"U -> D [ACL]"| Assistant
+    Device -->|"U -> D [ACL]"| Assistant
+    Evaluation -->|"U -> D [ACL]"| Assistant
+    Alerting -->|"U -> D [ACL]"| Assistant
+
     %% Shared Kernel Dependencies
     IAM -.->|"SK"| Shared
     Device -.->|"SK"| Shared
@@ -43,12 +49,13 @@ flowchart LR
     Billing -.->|"SK"| Shared
     Evaluation -.->|"SK"| Shared
     Notifications -.->|"SK"| Shared
+    Assistant -.->|"SK"| Shared
 
     title ~~~ IAM
 
     classDef context fill:#ff6666,stroke:#000,stroke-width:1.5px,color:#000;
     classDef titleNode fill:transparent,stroke:transparent,color:#000,font-size:22px,font-weight:bold;
 
-    class IAM,Device,Alerting,Analytics,Billing,Evaluation,Notifications,Shared context;
+    class IAM,Device,Alerting,Analytics,Billing,Evaluation,Notifications,Assistant,Shared context;
     class title titleNode;
 ```

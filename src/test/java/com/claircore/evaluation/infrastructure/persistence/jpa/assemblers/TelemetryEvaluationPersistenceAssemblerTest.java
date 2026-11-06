@@ -5,7 +5,9 @@ import com.claircore.evaluation.domain.model.valueobjects.AirQuality;
 import com.claircore.evaluation.domain.model.valueobjects.Connectivity;
 import com.claircore.evaluation.domain.model.valueobjects.DeviceId;
 import com.claircore.evaluation.domain.model.valueobjects.Location;
+import com.claircore.evaluation.domain.model.valueobjects.Hydrology;
 import com.claircore.evaluation.domain.model.valueobjects.ParticulateMatter;
+import com.claircore.evaluation.domain.model.valueobjects.PowerStatus;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -24,7 +26,7 @@ class TelemetryEvaluationPersistenceAssemblerTest {
                 3600L,
                 new AirQuality(400.0, 22.0, 45.0),
                 new ParticulateMatter(10.0, 15.0, 25.0),
-                new Connectivity("ONLINE", "WiFi", -50),
+                Hydrology.absent(), PowerStatus.absent(), new Connectivity("ONLINE", "WiFi", -50),
                 new Location("Chile"),
                 85,
                 "STABLE",
@@ -56,7 +58,7 @@ class TelemetryEvaluationPersistenceAssemblerTest {
                 new DeviceId(UUID.randomUUID()), UUID.fromString("00000000-0000-0000-0000-000000000123"), 1L,
                 new AirQuality(400.0, 22.0, 45.0),
                 new ParticulateMatter(10.0, 15.0, 25.0),
-                new Connectivity("ONLINE", null, null),
+                Hydrology.absent(), PowerStatus.absent(), new Connectivity("ONLINE", null, null),
                 new Location("Chile"), 85, "STABLE", Instant.now());
 
         var roundTripped = TelemetryEvaluationPersistenceAssembler.toDomainFromPersistence(
@@ -73,7 +75,7 @@ class TelemetryEvaluationPersistenceAssemblerTest {
                         new DeviceId(UUID.randomUUID()), UUID.fromString("00000000-0000-0000-0000-000000000123"), 1L,
                         new AirQuality(400.0, 22.0, 45.0),
                         new ParticulateMatter(10.0, 15.0, 25.0),
-                        new Connectivity("ONLINE", "WiFi", -50),
+                        Hydrology.absent(), PowerStatus.absent(), new Connectivity("ONLINE", "WiFi", -50),
                         new Location("Chile"), 85, "STABLE", Instant.now()));
 
         assertThat(entity.isNew()).isTrue();

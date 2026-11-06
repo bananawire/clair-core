@@ -38,4 +38,14 @@ public class BillingContextFacadeImpl implements BillingContextFacade {
     public boolean canAccessMonthlyReports(UUID userId) {
         return resolveEffectivePlanType(userId).monthlyReports();
     }
+
+    @Override
+    public int getAssistantDailyMessageLimit(UUID userId) {
+        return resolveEffectivePlanType(userId).assistantDailyMessages();
+    }
+
+    @Override
+    public String getPlanName(UUID userId) {
+        return resolveEffectivePlanType(userId).name();
+    }
 }

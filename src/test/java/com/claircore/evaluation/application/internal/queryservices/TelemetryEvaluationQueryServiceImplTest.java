@@ -36,7 +36,7 @@ class TelemetryEvaluationQueryServiceImplTest {
                 new DeviceId(deviceId), UUID.fromString("00000000-0000-0000-0000-000000000123"), 3600L,
                 new AirQuality(400.0, 22.0, 45.0),
                 new ParticulateMatter(10.0, 15.0, 25.0),
-                new Connectivity("ONLINE", "WiFi", -50),
+                Hydrology.absent(), PowerStatus.absent(), new Connectivity("ONLINE", "WiFi", -50),
                 new Location("Chile"),
                 85, "STABLE", Instant.now()
         );
@@ -63,7 +63,7 @@ class TelemetryEvaluationQueryServiceImplTest {
                 new DeviceId(deviceId), UUID.fromString("00000000-0000-0000-0000-000000000123"), 3600L,
                 new AirQuality(400.0, 22.0, 45.0),
                 new ParticulateMatter(10.0, 15.0, 25.0),
-                new Connectivity("ONLINE", "WiFi", -50),
+                Hydrology.absent(), PowerStatus.absent(), new Connectivity("ONLINE", "WiFi", -50),
                 new Location("Chile"),
                 85, "STABLE", Instant.now()
         );

@@ -7,5 +7,7 @@ public record RegistrationInitiatedResource(
     @Schema(description = "Registration session ID")
     String sessionId,
     @Schema(description = "Status message")
-    String message
+    String message,
+    @Schema(description = "Whether the user must confirm an email verification code")
+    boolean verificationRequired
 ) {}

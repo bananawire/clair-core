@@ -4,7 +4,9 @@ public enum MetricType {
     PM25("PM2.5", "µg/m³"),
     CO2("CO2", "ppm"),
     TEMPERATURE("Temperature", "°C"),
-    HUMIDITY("Humidity", "%");
+    HUMIDITY("Humidity", "%"),
+    RAINFALL("Rainfall", "mm"),
+    WATER_LEVEL("Water level", "cm");
 
     private final String label;
     private final String unit;

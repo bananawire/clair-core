@@ -56,6 +56,9 @@ class UserCommandServiceImplTest {
 
     private UserCommandServiceImpl service;
 
+    @Mock
+    private RegistrationPolicy registrationPolicy;
+
     @org.junit.jupiter.api.BeforeEach
     void setUp() {
         service = new UserCommandServiceImpl(
@@ -63,8 +66,10 @@ class UserCommandServiceImplTest {
                 registrationSessionRepository,
                 passwordEncoder,
                 asyncNotificationService,
-                eventPublisher
+                eventPublisher,
+                registrationPolicy
         );
+        org.mockito.Mockito.lenient().when(registrationPolicy.emailVerificationRequired()).thenReturn(true);
     }
 
     @Test
@@ -80,6 +85,26 @@ class UserCommandServiceImplTest {
         assertEquals("user@example.com", result.get().email().address());
         verify(registrationSessionRepository).save(any(RegistrationSession.class));
         verify(asyncNotificationService).sendVerificationCode("user@example.com", result.get().verificationCode().code());
+    }
+
+    @Test
+    void shouldCreateActiveLocalAccountWithoutEmailOrPersistingVerificationSession() {
+        when(registrationPolicy.emailVerificationRequired()).thenReturn(false);
+        when(passwordEncoder.encode("Local123!")).thenReturn("encoded-password");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.handle(new InitiateRegistrationCommand("local@example.test", "Local123!"));
+
+        assertTrue(result.isPresent());
+        var user = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(user.capture());
+        assertTrue(user.getValue().isActive());
+        assertEquals("encoded-password", user.getValue().getPassword().passwordHash());
+        assertEquals(OAuthProvider.MAIL, user.getValue().getOauthProvider());
+        verify(registrationSessionRepository, never()).save(any());
+        verify(asyncNotificationService, never()).sendVerificationCode(anyString(), anyString());
+        verify(asyncNotificationService, never()).sendWelcomeEmail(anyString());
+        verify(eventPublisher).publishEvent(any(UserRegisteredIntegrationEvent.class));
     }
 
     @Test

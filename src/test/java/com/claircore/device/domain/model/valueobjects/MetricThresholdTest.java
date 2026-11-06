@@ -29,4 +29,16 @@ class MetricThresholdTest {
         assertEquals("Humidity", MetricThreshold.HUMIDITY.label());
         assertEquals("%", MetricThreshold.HUMIDITY.unit());
     }
+
+    @Test
+    void shouldExposeLabelAndUnitForRainfall() {
+        assertEquals("Rainfall", MetricThreshold.RAINFALL.label());
+        assertEquals("mm", MetricThreshold.RAINFALL.unit());
+    }
+
+    @Test
+    void shouldExposeLabelAndUnitForWaterLevel() {
+        assertEquals("Water level", MetricThreshold.WATER_LEVEL.label());
+        assertEquals("cm", MetricThreshold.WATER_LEVEL.unit());
+    }
 }

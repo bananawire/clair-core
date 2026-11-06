@@ -7,6 +7,8 @@
 # ---------------------------------------------------------------------------
 
 spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:default}
   application:
     name: clair-core
 
@@ -77,6 +79,10 @@ SMTP_FROM: ${SMTP_FROM:noreply@localhost}
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
 
+iam:
+  registration:
+    local-auto-confirm: ${LOCAL_REGISTRATION_AUTO_CONFIRM:false}
+
 jwt:
   secret: ${JWT_SECRET}
   expiration: ${JWT_EXPIRATION:3600000}
@@ -94,6 +100,7 @@ frontend:
 
 server:
   port: ${PORT:49220}
+  address: ${SERVER_ADDRESS:0.0.0.0}
   compression:
     enabled: true
     mime-types: application/json,application/xml,text/html,text/plain

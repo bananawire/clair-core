@@ -39,7 +39,9 @@ public class TelemetryRecordedEventHandler {
                     BigDecimal.valueOf(event.pm2_5()),
                     BigDecimal.valueOf(event.co2()),
                     BigDecimal.valueOf(event.temperature()),
-                    BigDecimal.valueOf(event.humidity())
+                    BigDecimal.valueOf(event.humidity()),
+                    BigDecimal.valueOf(event.rainfallMm()),
+                    BigDecimal.valueOf(event.waterLevelCm())
             ));
             // The receipt is written only after a successful evaluation; a failure leaves it null so the
             // catch-up scheduler replays this reading instead of losing it.

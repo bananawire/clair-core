@@ -56,8 +56,7 @@ class AlertUnitTest {
         when(repository.save(any(Alert.class))).thenAnswer(invocation -> invocation.getArgument(0));
         var service = new AlertCommandServiceImpl(repository, thresholds, devices, mock(ApplicationEventPublisher.class));
 
-        service.handle(new EvaluateTelemetryForAlertsCommand(DEVICE_ID, OCCURRED_AT,
-                new BigDecimal(pm25Reading), new BigDecimal("400"), new BigDecimal("22"), new BigDecimal("50")));
+        service.handle(new EvaluateTelemetryForAlertsCommand(DEVICE_ID, OCCURRED_AT, new BigDecimal(pm25Reading), new BigDecimal("400"), new BigDecimal("22"), new BigDecimal("50"), java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO));
 
         ArgumentCaptor<Alert> saved = ArgumentCaptor.forClass(Alert.class);
         verify(repository).save(saved.capture());
@@ -110,8 +109,7 @@ class AlertUnitTest {
         BigDecimal missingPm25 = null;
 
         // Act + Assert
-        assertThatThrownBy(() -> new EvaluateTelemetryForAlertsCommand(DEVICE_ID, OCCURRED_AT, missingPm25,
-                new BigDecimal("400"), new BigDecimal("22"), new BigDecimal("50")))
+        assertThatThrownBy(() -> new EvaluateTelemetryForAlertsCommand(DEVICE_ID, OCCURRED_AT, missingPm25, new BigDecimal("400"), new BigDecimal("22"), new BigDecimal("50"), java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Telemetry values must not be null");
     }
@@ -132,8 +130,7 @@ class AlertUnitTest {
                 mock(ApplicationEventPublisher.class));
 
         // Act
-        service.handle(new EvaluateTelemetryForAlertsCommand(DEVICE_ID, OCCURRED_AT,
-                new BigDecimal("90"), new BigDecimal("400"), new BigDecimal("22"), new BigDecimal("50")));
+        service.handle(new EvaluateTelemetryForAlertsCommand(DEVICE_ID, OCCURRED_AT, new BigDecimal("90"), new BigDecimal("400"), new BigDecimal("22"), new BigDecimal("50"), java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO));
 
         // Assert
         verify(repository, never()).save(any(Alert.class));

@@ -23,6 +23,12 @@ public record EvaluateTelemetryResource(
         @Schema(description = "Particulate matter sensor data")
         @NotNull ParticulateMatterResource particulateMatter,
 
+        @Schema(description = "Outdoor hydrology sensor data; omitted readings default to dry/zero")
+        HydrologyResource hydrology,
+
+        @Schema(description = "Outdoor power status; omitted for indoor nodes")
+        PowerStatusResource powerStatus,
+
         @Schema(description = "WiFi connectivity status")
         @NotNull ConnectivityResource connectivity,
 
@@ -61,6 +67,24 @@ public record EvaluateTelemetryResource(
 
             @Schema(description = "PM10 in µg/m³", example = "25")
             @NotNull Double pm10
+    ) {}
+
+    @Schema(description = "Outdoor hydrology sensor data")
+    public record HydrologyResource(
+            @Schema(description = "Rainfall accumulated in the sampling interval in mm", example = "1.25")
+            Double rainfallMm,
+
+            @Schema(description = "Water level relative to station datum in cm", example = "42.0")
+            Double waterLevelCm
+    ) {}
+
+    @Schema(description = "Outdoor power status")
+    public record PowerStatusResource(
+            @Schema(description = "Battery state of charge percent; null when unavailable", example = "78.0")
+            Double batteryPercent,
+
+            @Schema(description = "True when solar regulator delivers net charge", example = "true")
+            Boolean solarCharging
     ) {}
 
     @Schema(description = "WiFi connectivity status")

@@ -8,6 +8,7 @@ import com.claircore.localedge.domain.model.valueobjects.SimulationScenario;
 
 import java.security.SecureRandom;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -15,42 +16,23 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Realistic indoor air-quality simulator. Each metric (PM2.5, CO₂, temperature, humidity)
- * follows an AR(1) process with a sinusoidal seasonal mean and occasional exogenous shocks:
+ * Realistic indoor/outdoor air-quality and hydrology simulator.
+ *
+ * <p>Air metrics (PM2.5, CO₂, temperature, humidity) follow an AR(1) process with a sinusoidal
+ * seasonal mean and occasional exogenous shocks:
  *
  * <pre>
  *   X_t   = μ_t + φ·(X_{t−1} − μ_{t−1}) + β·E_t + ε_t,    ε_t ∼ N(0, σ²)
  *   μ_t   = B + A·sin(2π·t/T + θ + φ_offset)
  * </pre>
  *
- * <p><b>Why the AR(1) form kills the "jump" problem.</b> The standard random-walk generator
- * drew each reading uniformly inside a band, so a single cycle could jump from PM2.5 = 8
- * (RECOMMENDED) to PM2.5 = 600 (HIGH). Here, the {@code φ·(X_{t−1} − μ_{t−1})} term keeps
- * the trajectory close to the previous reading: when {@code X_{t−1} ≈ μ_{t−1}} the next
- * step is just {@code μ_t + β·E_t + ε}, and {@code φ < 1} forces any spike (cooking,
- * occupancy) to decay back to the seasonal mean over a handful of cycles.
- *
- * <p><b>What each knob does.</b>
+ * <p>Outdoor hydrology / power fields are physically coupled:
  * <ul>
- *   <li>{@code B, A, T, θ}: the seasonal mean. Defaults give a 1-hour period (T = 240 cycles
- *       at the 15 s cadence), so a demo run sees the full swing in roughly an hour.</li>
- *   <li>{@code φ}: persistence ∈ (0, 1). 0.85 for PM2.5, 0.92 for CO₂, 0.96 for temperature
- *       — temperature is the most sluggish of the four.</li>
- *   <li>{@code σ}: Gaussian noise std. 1 µg/m³ PM2.5, 18 ppm CO₂, 0.05 °C, 0.4 % humidity.</li>
- *   <li>{@code E_t, β}: external shocks. Bernoulli({@code eventProb}) fires cooking
- *       (PM2.5) or occupancy (CO₂) bumps that decay naturally through the AR term.</li>
+ *   <li>{@code rainfallMm}: Markov wet/dry chain + Gamma intensity, converted over Δt.</li>
+ *   <li>{@code waterLevelCm}: storage mass balance with a one-cycle lag of rain runoff.</li>
+ *   <li>{@code batteryPercent} / {@code solarCharging}: PVWatts-style irradiance reduced by
+ *       cloud/rain cover, then Coulomb / energy balance against a fixed ESP32 load.</li>
  * </ul>
- *
- * <p><b>Determinism.</b> With {@code seed != 0} the shared {@link java.util.Random} is fixed
- * and two fresh policies with the same seed produce identical first-call readings for the
- * same {@code deviceId} and {@code scenario}. With {@code seed == 0} the generator uses a
- * fresh {@link SecureRandom} on every cycle, so successive calls are not predictable.
- *
- * <p><b>Statefulness.</b> The policy is a Spring singleton bean; the
- * {@code Map<UUID, DeviceState>} is what makes consecutive cycles evolve smoothly instead
- * of redrawing from scratch each cycle. Switching scenarios reseeds the state at the new
- * scenario's seasonal mean so a hot toggle doesn't leave the device oscillating around the
- * old mean forever.
  */
 public class SyntheticTelemetryGeneratorPolicy {
 
@@ -65,22 +47,39 @@ public class SyntheticTelemetryGeneratorPolicy {
     private static final double TWO_PI = 2.0 * Math.PI;
     private static final UUID LEGACY_DEVICE_ID = new UUID(0L, 0L);
 
+    /** Sampling interval assumed by the LocalEdge scheduler (15 s). */
+    private static final double DELTA_T_SECONDS = 15.0;
+    private static final double DELTA_T_HOURS = DELTA_T_SECONDS / 3600.0;
+
+    // Hydrology mass-balance knobs (small synthetic catchment).
+    private static final double CATCHMENT_AREA_M2 = 2_500.0;
+    private static final double RUNOFF_COEFFICIENT = 0.45;
+    private static final double STORAGE_AREA_M2 = 120.0;
+    private static final double OUTFLOW_K = 0.012;
+    private static final double OUTFLOW_EXPONENT = 1.5;
+    private static final double BASE_WATER_LEVEL_M = 0.40;
+    private static final int RAIN_LAG_CYCLES = 1;
+
+    // Power knobs.
+    private static final double PANEL_STC_W = 10.0;
+    private static final double PANEL_TEMP_COEFF = -0.004;
+    private static final double REGULATOR_EFFICIENCY = 0.80;
+    private static final double BATTERY_CAPACITY_WH = 18.5;
+    private static final double ESP32_LOAD_W = 0.6;
+    private static final double CHARGE_EFFICIENCY = 0.90;
+    private static final double DISCHARGE_EFFICIENCY = 0.95;
+
     private enum Metric { PM25, CO2, TEMP, HUMIDITY }
 
-    /**
-     * AR(1) parameters for one (scenario, metric) cell. Values come from
-     * {@link #params(SimulationScenario, Metric)}; held in a record so the AR step has a
-     * single typed bundle to read from.
-     */
     private record MetricParams(
-            double base,          // B   — seasonal mean center
-            double amplitude,     // A   — half-range of the seasonal swing
-            double period,        // T   — cycles per full sine period
-            double phase,         // θ   — scenario phase offset (radians)
-            double phi,           // φ   — AR(1) persistence, 0 < φ < 1
-            double sigma,         // σ   — Gaussian noise std
-            double eventProb,     // P(E_t = 1) per cycle
-            double eventMagnitude // β   — magnitude of the event shock
+            double base,
+            double amplitude,
+            double period,
+            double phase,
+            double phi,
+            double sigma,
+            double eventProb,
+            double eventMagnitude
     ) {}
 
     private final java.util.Random random;
@@ -146,9 +145,11 @@ public class SyntheticTelemetryGeneratorPolicy {
         state.temperature = arStep(state.temperature, t, tPrev, params(scenario, Metric.TEMP), phaseOffset);
         state.humidity = arStep(state.humidity, t, tPrev, params(scenario, Metric.HUMIDITY), phaseOffset);
 
-        double pm1 = state.pm25 * (0.40 + 0.15 * random.nextDouble());  // strictly below pm25
-        double pm10 = state.pm25 * (1.20 + 0.30 * random.nextDouble()); // strictly above pm25
-        int dbm = -1 * (40 + random.nextInt(31));                       // -40 to -70 dBm
+        stepHydrologyAndPower(state, scenario, now);
+
+        double pm1 = state.pm25 * (0.40 + 0.15 * random.nextDouble());
+        double pm10 = state.pm25 * (1.20 + 0.30 * random.nextDouble());
+        int dbm = -1 * (40 + random.nextInt(31));
 
         ConnectivitySnapshot connectivity = new ConnectivitySnapshot(
                 DEFAULT_CONNECTIVITY_STATUS, DEFAULT_NETWORK_NAME, Integer.valueOf(dbm), now);
@@ -164,18 +165,93 @@ public class SyntheticTelemetryGeneratorPolicy {
                 round2(pm1),
                 round2(state.pm25),
                 round2(pm10),
+                round2(state.rainfallMm),
+                round2(state.waterLevelCm),
+                round2(state.batteryPercent),
+                state.solarCharging,
                 connectivity.status(),
                 location.country(),
                 connectivity.networkName(),
                 now);
     }
 
-    /**
-     * Single AR(1) step. {@code mu_t} is the seasonal mean at the current cycle,
-     * {@code muPrev} at the previous cycle. When {@code t == 0} both equal the initial
-     * mean and the persistence term collapses, giving the steady-start behaviour the tests
-     * rely on.
-     */
+    private void stepHydrologyAndPower(DeviceState state, SimulationScenario scenario, Instant now) {
+        RainParams rain = rainParams(scenario);
+        boolean wasWet = state.wet;
+        double stayWetProb = wasWet ? rain.p11 : rain.p01;
+        state.wet = random.nextDouble() < stayWetProb;
+
+        double intensityMmPerHour = 0.0;
+        if (state.wet) {
+            intensityMmPerHour = sampleGamma(rain.gammaShape, rain.gammaScale);
+        }
+        state.rainfallMm = Math.max(0.0, intensityMmPerHour * DELTA_T_HOURS);
+
+        // One-cycle lag: runoff from the previous interval arrives now.
+        double laggedRainMm = state.pendingRunoffMm;
+        state.pendingRunoffMm = state.rainfallMm;
+
+        double qIn = (RUNOFF_COEFFICIENT * CATCHMENT_AREA_M2 * (laggedRainMm / DELTA_T_HOURS)) / 3_600_000.0;
+        double headAboveBase = Math.max(0.0, (state.waterLevelCm / 100.0) - BASE_WATER_LEVEL_M);
+        double qOut = OUTFLOW_K * Math.pow(headAboveBase, OUTFLOW_EXPONENT);
+        double deltaHMeters = ((qIn - qOut) * DELTA_T_SECONDS) / STORAGE_AREA_M2;
+        state.waterLevelCm = clamp(state.waterLevelCm + deltaHMeters * 100.0, 5.0, 500.0);
+
+        int hour = now.atZone(ZoneOffset.UTC).getHour();
+        double clearSky = clearSkyIrradiance(hour);
+        double cloudFactor = state.wet ? Math.max(0.05, 1.0 - Math.min(1.0, intensityMmPerHour / 40.0)) : 1.0;
+        double irradiance = clearSky * cloudFactor;
+        double cellTemp = state.temperature + (irradiance > 50.0 ? 10.0 : 0.0);
+        double pPv = PANEL_STC_W * (irradiance / 1000.0) * (1.0 + PANEL_TEMP_COEFF * (cellTemp - 25.0));
+        pPv = Math.max(0.0, pPv);
+        double usableSolar = REGULATOR_EFFICIENCY * pPv;
+        double netPower = usableSolar - ESP32_LOAD_W;
+
+        double energyWh = state.batteryPercent / 100.0 * BATTERY_CAPACITY_WH;
+        if (netPower >= 0.0) {
+            energyWh += CHARGE_EFFICIENCY * netPower * DELTA_T_HOURS;
+        } else {
+            energyWh += (netPower / DISCHARGE_EFFICIENCY) * DELTA_T_HOURS;
+        }
+        energyWh = clamp(energyWh, 0.0, BATTERY_CAPACITY_WH);
+        state.batteryPercent = 100.0 * energyWh / BATTERY_CAPACITY_WH;
+        state.solarCharging = usableSolar > ESP32_LOAD_W && state.batteryPercent < 99.9;
+    }
+
+    private static double clearSkyIrradiance(int hourUtc) {
+        // Simple daylight envelope peaking near local noon for coastal Peru (UTC-5 ≈ hour 17 UTC).
+        int localHour = (hourUtc - 5 + 24) % 24;
+        if (localHour < 6 || localHour > 18) {
+            return 0.0;
+        }
+        double x = (localHour - 6) / 12.0;
+        return 1000.0 * Math.sin(Math.PI * x);
+    }
+
+    /** Marsaglia–Tsang style Gamma(k, θ) for k >= 1; for k < 1 boosts via Gamma(k+1)/U^{1/k}. */
+    private double sampleGamma(double shape, double scale) {
+        if (shape < 1.0) {
+            double boosted = sampleGamma(shape + 1.0, scale);
+            double u = Math.max(random.nextDouble(), 1e-12);
+            return boosted * Math.pow(u, 1.0 / shape);
+        }
+        double d = shape - 1.0 / 3.0;
+        double c = 1.0 / Math.sqrt(9.0 * d);
+        while (true) {
+            double x = gaussian(1.0);
+            double v = 1.0 + c * x;
+            if (v <= 0) continue;
+            v = v * v * v;
+            double u = random.nextDouble();
+            if (u < 1.0 - 0.0331 * (x * x) * (x * x)) {
+                return d * v * scale;
+            }
+            if (Math.log(u) < 0.5 * x * x + d * (1.0 - v + Math.log(v))) {
+                return d * v * scale;
+            }
+        }
+    }
+
     private double arStep(double xPrev, long t, long tPrev, MetricParams p, double phaseOffset) {
         double muT = seasonalMean(p, t, phaseOffset);
         double muPrev = seasonalMean(p, tPrev, phaseOffset);
@@ -188,17 +264,10 @@ public class SyntheticTelemetryGeneratorPolicy {
         return p.base + p.amplitude * Math.sin(TWO_PI * cycle / p.period + p.phase + phaseOffset);
     }
 
-    /**
-     * Per-(scenario, metric) AR(1) parameters. {@code base} sits inside the target indoor
-     * band so the seasonal mean oscillates around healthy, alert, or hazardous values; the
-     * amplitudes are bounded so peak-to-peak swings stay plausible for indoor air quality.
-     */
     private MetricParams params(SimulationScenario s, Metric m) {
         return switch (s) {
             case MIXED -> switch (m) {
                 case PM25 -> new MetricParams(12.0, 6.0, 240.0, 0.0, 0.85, 1.0, 0.015, 25.0);
-                // CO₂ bounds: with φ=0.85 the stationary spread is σ / sqrt(1-φ²) ≈ 2.3σ,
-                // so the seasonal min (B − A = 500) minus 3σ_stationary stays above 400.
                 case CO2  -> new MetricParams(600.0, 100.0, 240.0, 0.0, 0.85, 12.0, 0.025, 250.0);
                 case TEMP -> new MetricParams(23.5, 1.5, 240.0, 0.0, 0.96, 0.05, 0.0, 0.0);
                 case HUMIDITY -> new MetricParams(50.0, 8.0, 240.0, 0.0, 0.90, 0.4, 0.0, 0.0);
@@ -230,6 +299,18 @@ public class SyntheticTelemetryGeneratorPolicy {
         };
     }
 
+    private record RainParams(double p01, double p11, double gammaShape, double gammaScale) {}
+
+    private RainParams rainParams(SimulationScenario scenario) {
+        return switch (scenario) {
+            case RECOMMENDED_ONLY -> new RainParams(0.01, 0.20, 1.5, 2.0);
+            case MIXED -> new RainParams(0.04, 0.55, 2.0, 4.0);
+            case ALERT_ONLY -> new RainParams(0.08, 0.70, 2.2, 6.0);
+            case HIGH_ONLY -> new RainParams(0.15, 0.80, 2.5, 10.0);
+            case STRESS_TEST -> new RainParams(0.25, 0.90, 3.0, 14.0);
+        };
+    }
+
     private DeviceState initialState(UUID deviceId, SimulationScenario scenario) {
         double phaseOffset = phaseOffset(deviceId);
         DeviceState s = new DeviceState(scenario, 0L);
@@ -243,6 +324,12 @@ public class SyntheticTelemetryGeneratorPolicy {
                 case HUMIDITY -> s.humidity = v;
             }
         }
+        s.waterLevelCm = BASE_WATER_LEVEL_M * 100.0;
+        s.batteryPercent = 70.0;
+        s.solarCharging = false;
+        s.wet = false;
+        s.pendingRunoffMm = 0.0;
+        s.rainfallMm = 0.0;
         return s;
     }
 
@@ -252,18 +339,20 @@ public class SyntheticTelemetryGeneratorPolicy {
         state.co2 = fresh.co2;
         state.temperature = fresh.temperature;
         state.humidity = fresh.humidity;
+        state.waterLevelCm = fresh.waterLevelCm;
+        state.batteryPercent = fresh.batteryPercent;
+        state.solarCharging = fresh.solarCharging;
+        state.wet = fresh.wet;
+        state.pendingRunoffMm = fresh.pendingRunoffMm;
+        state.rainfallMm = fresh.rainfallMm;
         state.lastScenario = scenario;
-        // Keep cycleCount so the seasonal phase continues across the toggle; the AR term
-        // will move the values toward the new scenario's mean within a handful of cycles.
     }
 
-    /** Per-device phase offset (0 to 2π) so devices don't all rise and fall in lock-step. */
     private double phaseOffset(UUID deviceId) {
         long h = deviceId.getLeastSignificantBits() ^ deviceId.getMostSignificantBits();
         return (h & 0xFFFFL) / 65535.0 * TWO_PI;
     }
 
-    /** Box–Muller; consumes two uniform draws. {@code Math.max} guards the log() against u1=0. */
     private double gaussian(double sigma) {
         double u1 = Math.max(random.nextDouble(), 1e-12);
         double u2 = random.nextDouble();
@@ -280,6 +369,10 @@ public class SyntheticTelemetryGeneratorPolicy {
 
     private static double round2(double v) {
         return Math.round(v * 100.0) / 100.0;
+    }
+
+    private static double clamp(double v, double min, double max) {
+        return Math.max(min, Math.min(max, v));
     }
 
     public static String formatCountry() {
@@ -309,6 +402,12 @@ public class SyntheticTelemetryGeneratorPolicy {
         double co2;
         double temperature;
         double humidity;
+        double rainfallMm;
+        double waterLevelCm;
+        double batteryPercent;
+        boolean solarCharging;
+        boolean wet;
+        double pendingRunoffMm;
         SimulationScenario lastScenario;
         long cycleCount;
 

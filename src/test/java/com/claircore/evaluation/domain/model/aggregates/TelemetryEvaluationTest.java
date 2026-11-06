@@ -22,7 +22,7 @@ class TelemetryEvaluationTest {
         // Arrange & Act
         TelemetryEvaluation evaluation = new TelemetryEvaluation(
                 sampleDeviceId, sampleTime, 3600L, sampleAirQuality, samplePM,
-                sampleConnectivity, sampleLocation, 85, "STABLE", sampleRecordedAt
+                Hydrology.absent(), PowerStatus.absent(), sampleConnectivity, sampleLocation, 85, "STABLE", sampleRecordedAt
         );
 
         // Assert
@@ -44,7 +44,7 @@ class TelemetryEvaluationTest {
     void shouldThrowExceptionWhenDeviceIdIsNull() {
         assertThatThrownBy(() -> new TelemetryEvaluation(
                 null, sampleTime, 3600L, sampleAirQuality, samplePM,
-                sampleConnectivity, sampleLocation, 85, "STABLE", sampleRecordedAt))
+                Hydrology.absent(), PowerStatus.absent(), sampleConnectivity, sampleLocation, 85, "STABLE", sampleRecordedAt))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Device ID must not be null");
     }
@@ -53,7 +53,7 @@ class TelemetryEvaluationTest {
     void shouldThrowExceptionWhenUptimeIsNull() {
         assertThatThrownBy(() -> new TelemetryEvaluation(
                 sampleDeviceId, sampleTime, null, sampleAirQuality, samplePM,
-                sampleConnectivity, sampleLocation, 85, "STABLE", sampleRecordedAt))
+                Hydrology.absent(), PowerStatus.absent(), sampleConnectivity, sampleLocation, 85, "STABLE", sampleRecordedAt))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("uptime must not be null or negative");
     }
@@ -62,7 +62,7 @@ class TelemetryEvaluationTest {
     void shouldThrowExceptionWhenHealthStatusIsNegative() {
         assertThatThrownBy(() -> new TelemetryEvaluation(
                 sampleDeviceId, sampleTime, 3600L, sampleAirQuality, samplePM,
-                sampleConnectivity, sampleLocation, -5, "STABLE", sampleRecordedAt))
+                Hydrology.absent(), PowerStatus.absent(), sampleConnectivity, sampleLocation, -5, "STABLE", sampleRecordedAt))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("healthStatus must be between 0 and 100");
     }

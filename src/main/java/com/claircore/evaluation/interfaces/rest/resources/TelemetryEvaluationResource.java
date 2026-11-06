@@ -25,6 +25,12 @@ public record TelemetryEvaluationResource(
         @Schema(description = "Particulate matter sensor data")
         ParticulateMatterResource particulateMatter,
 
+        @Schema(description = "Outdoor hydrology sensor data")
+        HydrologyResource hydrology,
+
+        @Schema(description = "Outdoor power status")
+        PowerStatusResource powerStatus,
+
         @Schema(description = "WiFi connectivity status")
         ConnectivityResource connectivity,
 
@@ -61,6 +67,18 @@ public record TelemetryEvaluationResource(
             Double pm1_0,
             Double pm2_5,
             Double pm10
+    ) {}
+
+    @Schema(description = "Outdoor hydrology sensor data")
+    public record HydrologyResource(
+            Double rainfallMm,
+            Double waterLevelCm
+    ) {}
+
+    @Schema(description = "Outdoor power status")
+    public record PowerStatusResource(
+            Double batteryPercent,
+            boolean solarCharging
     ) {}
 
     @Schema(description = "WiFi connectivity status")

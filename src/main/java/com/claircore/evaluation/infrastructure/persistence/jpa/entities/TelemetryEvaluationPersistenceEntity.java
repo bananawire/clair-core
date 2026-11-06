@@ -3,8 +3,10 @@ package com.claircore.evaluation.infrastructure.persistence.jpa.entities;
 import com.claircore.evaluation.domain.model.valueobjects.DeviceId;
 import com.claircore.evaluation.infrastructure.persistence.jpa.embeddables.AirQualityPersistenceEmbeddable;
 import com.claircore.evaluation.infrastructure.persistence.jpa.embeddables.ConnectivityPersistenceEmbeddable;
+import com.claircore.evaluation.infrastructure.persistence.jpa.embeddables.HydrologyPersistenceEmbeddable;
 import com.claircore.evaluation.infrastructure.persistence.jpa.embeddables.LocationPersistenceEmbeddable;
 import com.claircore.evaluation.infrastructure.persistence.jpa.embeddables.ParticulateMatterPersistenceEmbeddable;
+import com.claircore.evaluation.infrastructure.persistence.jpa.embeddables.PowerStatusPersistenceEmbeddable;
 import com.claircore.shared.infrastructure.persistence.jpa.entities.AuditableAbstractPersistenceEntity;
 import jakarta.persistence.AttributeOverride;
 import jakarta.persistence.Column;
@@ -49,6 +51,16 @@ public class TelemetryEvaluationPersistenceEntity extends AuditableAbstractPersi
     private ParticulateMatterPersistenceEmbeddable particulateMatter;
 
     @Embedded
+    @AttributeOverride(name = "rainfallMm", column = @Column(name = "hydro_rainfall_mm", nullable = false))
+    @AttributeOverride(name = "waterLevelCm", column = @Column(name = "hydro_water_level_cm", nullable = false))
+    private HydrologyPersistenceEmbeddable hydrology;
+
+    @Embedded
+    @AttributeOverride(name = "batteryPercent", column = @Column(name = "pwr_battery_percent"))
+    @AttributeOverride(name = "solarCharging", column = @Column(name = "pwr_solar_charging", nullable = false))
+    private PowerStatusPersistenceEmbeddable powerStatus;
+
+    @Embedded
     @AttributeOverride(name = "status", column = @Column(name = "conn_status", nullable = false))
     @AttributeOverride(name = "network", column = @Column(name = "conn_network"))
     @AttributeOverride(name = "signalStrength", column = @Column(name = "conn_signal_strength"))
@@ -88,6 +100,12 @@ public class TelemetryEvaluationPersistenceEntity extends AuditableAbstractPersi
 
     public ParticulateMatterPersistenceEmbeddable getParticulateMatter() { return particulateMatter; }
     public void setParticulateMatter(ParticulateMatterPersistenceEmbeddable particulateMatter) { this.particulateMatter = particulateMatter; }
+
+    public HydrologyPersistenceEmbeddable getHydrology() { return hydrology; }
+    public void setHydrology(HydrologyPersistenceEmbeddable hydrology) { this.hydrology = hydrology; }
+
+    public PowerStatusPersistenceEmbeddable getPowerStatus() { return powerStatus; }
+    public void setPowerStatus(PowerStatusPersistenceEmbeddable powerStatus) { this.powerStatus = powerStatus; }
 
     public ConnectivityPersistenceEmbeddable getConnectivity() { return connectivity; }
     public void setConnectivity(ConnectivityPersistenceEmbeddable connectivity) { this.connectivity = connectivity; }

@@ -8,9 +8,10 @@ import java.util.UUID;
  * telemetry batch endpoint). Primitive fields only so the Evaluation BC can build its {@code
  * EvaluateTelemetryCommand} without crossing into other BCs.
  *
- * <p>All metric fields are doubles in the indoor product range; {@code status} is a free-form
+ * <p>All metric fields are doubles in the indoor/outdoor product range; {@code status} is a free-form
  * string the device firmware uses (normally {@code "OK"}), and {@code connectivityStatus} the
- * receive side stores verbatim.
+ * receive side stores verbatim. Hydrology defaults to dry/zero when omitted by older producers;
+ * power fields are status-only and may be absent for indoor nodes.
  */
 public record TelemetrySubmission(
         UUID deviceId,
@@ -20,6 +21,10 @@ public record TelemetrySubmission(
         double pm1_0,
         double pm2_5,
         double pm10,
+        double rainfallMm,
+        double waterLevelCm,
+        Double batteryPercent,
+        boolean solarCharging,
         int healthStatus,
         String status,
         String country,
@@ -43,6 +48,15 @@ public record TelemetrySubmission(
         }
         if (status == null || status.isBlank()) {
             throw new IllegalArgumentException("status must not be blank");
+        }
+        if (!Double.isFinite(rainfallMm) || rainfallMm < 0) {
+            throw new IllegalArgumentException("rainfallMm must be finite and nonnegative");
+        }
+        if (!Double.isFinite(waterLevelCm) || waterLevelCm < 0) {
+            throw new IllegalArgumentException("waterLevelCm must be finite and nonnegative");
+        }
+        if (batteryPercent != null && (!Double.isFinite(batteryPercent) || batteryPercent < 0 || batteryPercent > 100)) {
+            throw new IllegalArgumentException("batteryPercent must be null or within [0, 100]");
         }
     }
 }

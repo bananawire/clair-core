@@ -89,7 +89,7 @@ class TelemetryEvaluationsControllerTest {
                 new DeviceId(firstDevice), UUID.fromString("00000000-0000-0000-0000-000000000123"), 3600L,
                 new AirQuality(400.0, 22.0, 45.0),
                 new ParticulateMatter(1.0, 2.0, 3.0),
-                new Connectivity("ONLINE", "WiFi", -50),
+                Hydrology.absent(), PowerStatus.absent(), new Connectivity("ONLINE", "WiFi", -50),
                 new Location("Chile"), 85, "STABLE", Instant.parse("2026-05-16T22:30:00Z"));
         when(telemetryEvaluationCommandService.handle(any(EvaluateTelemetryCommand.class))).thenReturn(evaluation);
 
@@ -131,7 +131,7 @@ class TelemetryEvaluationsControllerTest {
                 new DeviceId(resolvedDeviceId), UUID.fromString("00000000-0000-0000-0000-000000000123"), 3600L,
                 new AirQuality(400.0, 22.0, 45.0),
                 new ParticulateMatter(10.0, 15.0, 25.0),
-                new Connectivity("ONLINE", "WiFi", -50),
+                Hydrology.absent(), PowerStatus.absent(), new Connectivity("ONLINE", "WiFi", -50),
                 new Location("Chile"),
                 85, "STABLE", Instant.now()
         );
@@ -143,7 +143,7 @@ class TelemetryEvaluationsControllerTest {
                 "3600",
                 new EvaluateTelemetryResource.AirQualityResource(400.0, 22.0, 45.0),
                 new EvaluateTelemetryResource.ParticulateMatterResource(10.0, 15.0, 25.0),
-                new EvaluateTelemetryResource.ConnectivityResource("ONLINE", "WiFi", -50),
+                null, null, new EvaluateTelemetryResource.ConnectivityResource("ONLINE", "WiFi", -50),
                 new EvaluateTelemetryResource.LocationResource("Chile"),
                 85,
                 "STABLE",
@@ -173,7 +173,7 @@ class TelemetryEvaluationsControllerTest {
                 new DeviceId(resolvedDeviceId), UUID.fromString("00000000-0000-0000-0000-000000000123"), 3600L,
                 new AirQuality(400.0, 22.0, 45.0),
                 new ParticulateMatter(10.0, 15.0, 25.0),
-                new Connectivity("ONLINE", "WiFi", -50),
+                Hydrology.absent(), PowerStatus.absent(), new Connectivity("ONLINE", "WiFi", -50),
                 new Location("Chile"),
                 85, "STABLE", Instant.now()
         );
@@ -185,7 +185,7 @@ class TelemetryEvaluationsControllerTest {
                 "3600",
                 new EvaluateTelemetryResource.AirQualityResource(400.0, 22.0, 45.0),
                 new EvaluateTelemetryResource.ParticulateMatterResource(10.0, 15.0, 25.0),
-                new EvaluateTelemetryResource.ConnectivityResource("ONLINE", "WiFi", -50),
+                null, null, new EvaluateTelemetryResource.ConnectivityResource("ONLINE", "WiFi", -50),
                 new EvaluateTelemetryResource.LocationResource("Chile"),
                 85,
                 "STABLE",
@@ -215,7 +215,7 @@ class TelemetryEvaluationsControllerTest {
                 "3600",
                 new EvaluateTelemetryResource.AirQualityResource(400.0, 22.0, 45.0),
                 new EvaluateTelemetryResource.ParticulateMatterResource(10.0, 15.0, 25.0),
-                new EvaluateTelemetryResource.ConnectivityResource("ONLINE", "WiFi", -50),
+                null, null, new EvaluateTelemetryResource.ConnectivityResource("ONLINE", "WiFi", -50),
                 new EvaluateTelemetryResource.LocationResource("Chile"),
                 85,
                 "STABLE",
@@ -241,7 +241,7 @@ class TelemetryEvaluationsControllerTest {
                 "invalid-uptime-format",
                 new EvaluateTelemetryResource.AirQualityResource(400.0, 22.0, 45.0),
                 new EvaluateTelemetryResource.ParticulateMatterResource(10.0, 15.0, 25.0),
-                new EvaluateTelemetryResource.ConnectivityResource("ONLINE", "WiFi", -50),
+                null, null, new EvaluateTelemetryResource.ConnectivityResource("ONLINE", "WiFi", -50),
                 new EvaluateTelemetryResource.LocationResource("Chile"),
                 85,
                 "STABLE",
@@ -268,7 +268,7 @@ class TelemetryEvaluationsControllerTest {
                 "3600",
                 new EvaluateTelemetryResource.AirQualityResource(400.0, 22.0, 45.0),
                 new EvaluateTelemetryResource.ParticulateMatterResource(10.0, 15.0, 25.0),
-                new EvaluateTelemetryResource.ConnectivityResource("ONLINE", "WiFi", -50),
+                null, null, new EvaluateTelemetryResource.ConnectivityResource("ONLINE", "WiFi", -50),
                 new EvaluateTelemetryResource.LocationResource("Chile"),
                 85,
                 "STABLE",
@@ -294,7 +294,7 @@ class TelemetryEvaluationsControllerTest {
                 "3600",
                 new EvaluateTelemetryResource.AirQualityResource(400.0, 22.0, 45.0),
                 new EvaluateTelemetryResource.ParticulateMatterResource(10.0, 15.0, 25.0),
-                new EvaluateTelemetryResource.ConnectivityResource("ONLINE", "WiFi", -50),
+                null, null, new EvaluateTelemetryResource.ConnectivityResource("ONLINE", "WiFi", -50),
                 new EvaluateTelemetryResource.LocationResource("Chile"),
                 85,
                 "STABLE",
@@ -320,7 +320,7 @@ class TelemetryEvaluationsControllerTest {
                 "3600",
                 new EvaluateTelemetryResource.AirQualityResource(400.0, 22.0, 45.0),
                 new EvaluateTelemetryResource.ParticulateMatterResource(10.0, 15.0, 25.0),
-                new EvaluateTelemetryResource.ConnectivityResource("ONLINE", "WiFi", -50),
+                null, null, new EvaluateTelemetryResource.ConnectivityResource("ONLINE", "WiFi", -50),
                 new EvaluateTelemetryResource.LocationResource("Chile"),
                 85,
                 "STABLE",
@@ -368,7 +368,7 @@ class TelemetryEvaluationsControllerTest {
                 new DeviceId(deviceId), UUID.fromString("00000000-0000-0000-0000-000000000123"), 3600L,
                 new AirQuality(400.0, 22.0, 45.0),
                 new ParticulateMatter(10.0, 15.0, 25.0),
-                new Connectivity("ONLINE", "WiFi", -50),
+                Hydrology.absent(), PowerStatus.absent(), new Connectivity("ONLINE", "WiFi", -50),
                 new Location("Chile"),
                 85, "STABLE", Instant.now()
         );
@@ -393,7 +393,7 @@ class TelemetryEvaluationsControllerTest {
                 new DeviceId(deviceId), UUID.fromString("00000000-0000-0000-0000-000000000123"), 3600L,
                 new AirQuality(400.0, 22.0, 45.0),
                 new ParticulateMatter(10.0, 15.0, 25.0),
-                new Connectivity("ONLINE", "WiFi", -50),
+                Hydrology.absent(), PowerStatus.absent(), new Connectivity("ONLINE", "WiFi", -50),
                 new Location("Chile"),
                 85, "STABLE", Instant.now()
         );

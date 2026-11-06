@@ -9,6 +9,9 @@ public interface EvaluationContextFacade {
 
     Optional<Instant> getLatestEvaluationRecordedAt(UUID deviceId);
 
+    /** The newest reading of a device at or after {@code visibleSince}; null means no lower bound. */
+    Optional<TelemetryReading> getLatestReading(UUID deviceId, Instant visibleSince);
+
     List<HourlyTelemetryAverage> getHourlyTelemetryAggregation(Instant start, Instant end);
 
     /** Every reading in [start, end), device then time ascending. */

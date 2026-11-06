@@ -45,10 +45,19 @@ class NinoAlertServiceTest {
 
     @Test
     void fillsMissingReadingsWithTheDemoScenario() {
-        String prompt = NinoAlertService.describe(new HomeReadings(90.0, null, null, null));
+        String prompt = NinoAlertService.describe(new HomeReadings(90.0, null, null, null, null, null));
 
         assertTrue(prompt.contains("Humedad: 90 %"));
         assertTrue(prompt.contains("30.0 °C"));
         assertTrue(prompt.contains("ALTO (82/100)"));
+        assertTrue(!prompt.contains("Lluvia"));
+    }
+
+    @Test
+    void mentionsHydrologyOnlyWhenTheStationSendsIt() {
+        String prompt = NinoAlertService.describe(new HomeReadings(null, null, null, null, 35.5, 120.0));
+
+        assertTrue(prompt.contains("Lluvia en el último intervalo: 35.5 mm."));
+        assertTrue(prompt.contains("Nivel de agua cerca de la vivienda: 120 cm."));
     }
 }

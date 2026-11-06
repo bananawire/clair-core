@@ -36,7 +36,8 @@ public class NinoAlertController {
     public ResponseEntity<NinoAlertResource> generate(@Valid @RequestBody(required = false) NinoAlertRequest request) {
         var readings = request == null
                 ? HomeReadings.empty()
-                : new HomeReadings(request.humidity(), request.temperature(), request.riskLevel(), request.riskScore());
+                : new HomeReadings(request.humidity(), request.temperature(), request.riskLevel(), request.riskScore(),
+                        request.rainfallMm(), request.waterLevelCm());
         var alert = ninoAlertService.generate(readings);
         return ResponseEntity.ok(new NinoAlertResource(alert.message(), alert.source()));
     }

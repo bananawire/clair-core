@@ -43,7 +43,8 @@ public class NinoAlertService {
             Eres un sistema de alerta temprana del Fenómeno del Niño en Perú.
             Con los datos de una vivienda, escribe una alerta de máximo 2 oraciones, en español sencillo,
             para una familia sin conocimientos técnicos. Incluye una sola acción concreta para prevenir
-            el dengue o el golpe de calor. No inventes cifras ni cites fuentes que no se te dieron.
+            el dengue o el golpe de calor. Si hay datos de lluvia o nivel de agua y son altos, prioriza
+            la acción ante inundación o huaico. No inventes cifras ni cites fuentes que no se te dieron.
             Termina exactamente con: "%s"
             """.formatted(OFFICIAL_SOURCES_NOTICE);
 
@@ -80,9 +81,17 @@ public class NinoAlertService {
         double temperature = r.temperature() != null ? r.temperature() : DEFAULT_TEMPERATURE;
         String riskLevel = r.riskLevel() != null ? r.riskLevel() : DEFAULT_RISK_LEVEL;
         int riskScore = r.riskScore() != null ? r.riskScore() : DEFAULT_RISK_SCORE;
-        return String.format(Locale.ROOT,
+        String readings = String.format(Locale.ROOT,
                 "Vivienda en la costa norte del Perú durante El Niño costero. Humedad: %.0f %%. "
                         + "Temperatura interior: %.1f °C. Riesgo de dengue: %s (%d/100).",
                 humidity, temperature, riskLevel, riskScore);
+        // Hydrology only exists on outdoor stations, so it is mentioned only when sent
+        if (r.rainfallMm() != null) {
+            readings += String.format(Locale.ROOT, " Lluvia en el último intervalo: %.1f mm.", r.rainfallMm());
+        }
+        if (r.waterLevelCm() != null) {
+            readings += String.format(Locale.ROOT, " Nivel de agua cerca de la vivienda: %.0f cm.", r.waterLevelCm());
+        }
+        return readings;
     }
 }

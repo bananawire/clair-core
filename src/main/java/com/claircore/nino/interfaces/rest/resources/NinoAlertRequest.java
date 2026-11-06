@@ -23,5 +23,13 @@ public record NinoAlertRequest(
 
     @Min(0) @Max(100)
     @Schema(description = "Dengue risk score from 0 to 100", example = "82", nullable = true)
-    Integer riskScore
+    Integer riskScore,
+
+    @DecimalMin("0") @DecimalMax("1000")
+    @Schema(description = "Rainfall accumulated in the sampling interval in mm", example = "12.5", nullable = true)
+    Double rainfallMm,
+
+    @DecimalMin("0") @DecimalMax("10000")
+    @Schema(description = "Water level relative to the station datum in cm", example = "40", nullable = true)
+    Double waterLevelCm
 ) {}

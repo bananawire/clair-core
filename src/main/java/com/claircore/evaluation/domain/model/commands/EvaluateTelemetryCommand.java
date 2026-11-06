@@ -11,6 +11,8 @@ public record EvaluateTelemetryCommand(
         Long uptime,
         AirQuality airQuality,
         ParticulateMatter particulateMatter,
+        Hydrology hydrology,
+        PowerStatus powerStatus,
         Connectivity connectivity,
         Location location,
         Integer healthStatus,
@@ -32,6 +34,12 @@ public record EvaluateTelemetryCommand(
         }
         if (particulateMatter == null) {
             throw new IllegalArgumentException("particulateMatter must not be null");
+        }
+        if (hydrology == null) {
+            hydrology = Hydrology.absent();
+        }
+        if (powerStatus == null) {
+            powerStatus = PowerStatus.absent();
         }
         if (connectivity == null) {
             throw new IllegalArgumentException("connectivity must not be null");

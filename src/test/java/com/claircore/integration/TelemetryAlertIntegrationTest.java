@@ -57,7 +57,7 @@ class TelemetryAlertIntegrationTest extends AbstractIntegrationTest {
     /** Publishes the reading the way Evaluation does: inside a transaction, delivered after commit. */
     private void recordTelemetry(UUID deviceId, double pm25, Instant recordedAt) {
         var event = new TelemetryRecordedIntegrationEvent(deviceId, 450.0, 22.0, 50.0, 5.0, pm25, 20.0,
-                "ONLINE", "WiFi", -50, "Peru", 90, "STABLE", 3600L, UUID.randomUUID().toString(), recordedAt);
+                0.0, 0.0, null, false, "ONLINE", "WiFi", -50, "Peru", 90, "STABLE", 3600L, UUID.randomUUID().toString(), recordedAt);
         new TransactionTemplate(transactions).executeWithoutResult(status -> events.publishEvent(event));
     }
 

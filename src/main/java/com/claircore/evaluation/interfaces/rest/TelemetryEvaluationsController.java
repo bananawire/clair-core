@@ -83,12 +83,25 @@ public class TelemetryEvaluationsController {
             throw new IllegalArgumentException("Invalid created_at format: " + request.created_at(), e);
         }
 
+        var hydrology = request.hydrology() == null
+                ? Hydrology.absent()
+                : new Hydrology(
+                        request.hydrology().rainfallMm() == null ? 0.0 : request.hydrology().rainfallMm(),
+                        request.hydrology().waterLevelCm() == null ? 0.0 : request.hydrology().waterLevelCm());
+        var powerStatus = request.powerStatus() == null
+                ? PowerStatus.absent()
+                : new PowerStatus(
+                        request.powerStatus().batteryPercent(),
+                        Boolean.TRUE.equals(request.powerStatus().solarCharging()));
+
         var command = new EvaluateTelemetryCommand(
                 new DeviceId(deviceId),
                 readingId,
                 uptimeSeconds,
                 new AirQuality(request.airQuality().co2(), request.airQuality().temperature(), request.airQuality().humidity()),
                 new ParticulateMatter(request.particulateMatter().pm1_0(), request.particulateMatter().pm2_5(), request.particulateMatter().pm10()),
+                hydrology,
+                powerStatus,
                 new Connectivity(request.connectivity().status(), request.connectivity().network(), request.connectivity().signalStrength()),
                 new Location(request.location().country()),
                 request.healthStatus(),
@@ -131,10 +144,16 @@ public class TelemetryEvaluationsController {
         if (!r.get("uptime_seconds").isIntegralNumber() || !r.get("uptime_seconds").canConvertToLong()) throw new IllegalArgumentException("Invalid uptime_seconds");
         if (r.get("uptime_seconds").asLong() < 0 || r.get("health_status").asInt() < 0 || r.get("health_status").asInt() > 100) throw new IllegalArgumentException("Invalid range");
         // Construct the existing request shape so singular and batch paths share the same command handling.
+        Double rainfall = r.path("rainfall_mm").isNumber() ? r.get("rainfall_mm").doubleValue() : 0.0;
+        Double waterLevel = r.path("water_level_cm").isNumber() ? r.get("water_level_cm").doubleValue() : 0.0;
+        Double battery = r.path("battery_percent").isNumber() ? r.get("battery_percent").doubleValue() : null;
+        Boolean solarCharging = r.path("solar_charging").isBoolean() ? r.get("solar_charging").booleanValue() : Boolean.FALSE;
         return new EvaluateTelemetryResource(r.get("device_id").asText(), r.get("reading_id").asText(),
                 Long.toString(r.get("uptime_seconds").asLong()),
                 new EvaluateTelemetryResource.AirQualityResource(r.get("co2").doubleValue(), r.get("temperature").doubleValue(), r.get("humidity").doubleValue()),
                 new EvaluateTelemetryResource.ParticulateMatterResource(r.get("pm1_0").doubleValue(), r.get("pm2_5").doubleValue(), r.get("pm10").doubleValue()),
+                new EvaluateTelemetryResource.HydrologyResource(rainfall, waterLevel),
+                new EvaluateTelemetryResource.PowerStatusResource(battery, solarCharging),
                 new EvaluateTelemetryResource.ConnectivityResource(r.get("wifi_status").asText(), r.path("network_name").asText(null), r.path("signal_strength").isNumber() ? r.get("signal_strength").intValue() : null),
                 new EvaluateTelemetryResource.LocationResource(r.path("country").asText(null)), r.get("health_status").intValue(),
                 r.get("status").asText(), r.get("occurred_at").asText());

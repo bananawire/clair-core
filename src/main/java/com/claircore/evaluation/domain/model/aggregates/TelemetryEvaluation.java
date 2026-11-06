@@ -3,8 +3,10 @@ package com.claircore.evaluation.domain.model.aggregates;
 import com.claircore.evaluation.domain.model.valueobjects.AirQuality;
 import com.claircore.evaluation.domain.model.valueobjects.Connectivity;
 import com.claircore.evaluation.domain.model.valueobjects.DeviceId;
+import com.claircore.evaluation.domain.model.valueobjects.Hydrology;
 import com.claircore.evaluation.domain.model.valueobjects.Location;
 import com.claircore.evaluation.domain.model.valueobjects.ParticulateMatter;
+import com.claircore.evaluation.domain.model.valueobjects.PowerStatus;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -19,6 +21,8 @@ public class TelemetryEvaluation {
     private final DeviceId deviceId;
     private final AirQuality airQuality;
     private final ParticulateMatter particulateMatter;
+    private final Hydrology hydrology;
+    private final PowerStatus powerStatus;
     private final Connectivity connectivity;
     private final Location location;
     private final UUID readingId;
@@ -36,6 +40,8 @@ public class TelemetryEvaluation {
             Long uptime,
             AirQuality airQuality,
             ParticulateMatter particulateMatter,
+            Hydrology hydrology,
+            PowerStatus powerStatus,
             Connectivity connectivity,
             Location location,
             Integer healthStatus,
@@ -61,6 +67,12 @@ public class TelemetryEvaluation {
         if (particulateMatter == null) {
             throw new IllegalArgumentException("particulateMatter must not be null");
         }
+        if (hydrology == null) {
+            throw new IllegalArgumentException("hydrology must not be null");
+        }
+        if (powerStatus == null) {
+            throw new IllegalArgumentException("powerStatus must not be null");
+        }
         if (connectivity == null) {
             throw new IllegalArgumentException("connectivity must not be null");
         }
@@ -83,6 +95,8 @@ public class TelemetryEvaluation {
         this.uptime = uptime;
         this.airQuality = airQuality;
         this.particulateMatter = particulateMatter;
+        this.hydrology = hydrology;
+        this.powerStatus = powerStatus;
         this.connectivity = connectivity;
         this.location = location;
         this.healthStatus = healthStatus;
@@ -98,14 +112,16 @@ public class TelemetryEvaluation {
             Long uptime,
             AirQuality airQuality,
             ParticulateMatter particulateMatter,
+            Hydrology hydrology,
+            PowerStatus powerStatus,
             Connectivity connectivity,
             Location location,
             Integer healthStatus,
             String status,
             Instant recordedAt
     ) {
-        this(UUID.randomUUID(), deviceId, readingId, uptime, airQuality, particulateMatter, connectivity,
-                location, healthStatus, status, recordedAt, null, null);
+        this(UUID.randomUUID(), deviceId, readingId, uptime, airQuality, particulateMatter, hydrology, powerStatus,
+                connectivity, location, healthStatus, status, recordedAt, null, null);
     }
 
     /** Rebuilds a reading that already exists in storage, identity and audit timestamps included. */
@@ -116,6 +132,8 @@ public class TelemetryEvaluation {
             Long uptime,
             AirQuality airQuality,
             ParticulateMatter particulateMatter,
+            Hydrology hydrology,
+            PowerStatus powerStatus,
             Connectivity connectivity,
             Location location,
             Integer healthStatus,
@@ -123,14 +141,16 @@ public class TelemetryEvaluation {
             Instant recordedAt,
             Instant createdAt,
             Instant updatedAt) {
-        return new TelemetryEvaluation(id, deviceId, readingId, uptime, airQuality, particulateMatter,
-                connectivity, location, healthStatus, status, recordedAt, createdAt, updatedAt);
+        return new TelemetryEvaluation(id, deviceId, readingId, uptime, airQuality, particulateMatter, hydrology,
+                powerStatus, connectivity, location, healthStatus, status, recordedAt, createdAt, updatedAt);
     }
 
     public UUID getId() { return id; }
     public DeviceId getDeviceId() { return deviceId; }
     public AirQuality getAirQuality() { return airQuality; }
     public ParticulateMatter getParticulateMatter() { return particulateMatter; }
+    public Hydrology getHydrology() { return hydrology; }
+    public PowerStatus getPowerStatus() { return powerStatus; }
     public Connectivity getConnectivity() { return connectivity; }
     public Location getLocation() { return location; }
     public UUID getReadingId() { return readingId; }

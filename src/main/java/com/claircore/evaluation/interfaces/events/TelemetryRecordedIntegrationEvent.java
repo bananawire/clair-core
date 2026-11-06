@@ -10,6 +10,7 @@ import java.util.UUID;
  * context may listen to.
  *
  * <p>Alerting and analytics both listen to it; there is no internal telemetry event any more.
+ * Hydrology fields feed alerting thresholds; power fields are status-only.
  */
 public record TelemetryRecordedIntegrationEvent(
         UUID deviceId,
@@ -19,6 +20,10 @@ public record TelemetryRecordedIntegrationEvent(
         double pm1_0,
         double pm2_5,
         double pm10,
+        double rainfallMm,
+        double waterLevelCm,
+        Double batteryPercent,
+        boolean solarCharging,
         String connectivityStatus,
         String network,
         Integer signalStrength,
@@ -38,6 +43,10 @@ public record TelemetryRecordedIntegrationEvent(
                 evaluation.getParticulateMatter().pm1_0(),
                 evaluation.getParticulateMatter().pm2_5(),
                 evaluation.getParticulateMatter().pm10(),
+                evaluation.getHydrology().rainfallMm(),
+                evaluation.getHydrology().waterLevelCm(),
+                evaluation.getPowerStatus().batteryPercent(),
+                evaluation.getPowerStatus().solarCharging(),
                 evaluation.getConnectivity().status(),
                 evaluation.getConnectivity().network(),
                 evaluation.getConnectivity().signalStrength(),

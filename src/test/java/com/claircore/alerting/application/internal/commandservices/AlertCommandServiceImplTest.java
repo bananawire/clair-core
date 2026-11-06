@@ -119,8 +119,7 @@ class AlertCommandServiceImplTest {
     }
 
     private static EvaluateTelemetryForAlertsCommand command(BigDecimal pm25) {
-        return new EvaluateTelemetryForAlertsCommand(DEVICE_ID, OCCURRED_AT, pm25,
-                new BigDecimal("400"), new BigDecimal("22"), new BigDecimal("50"));
+        return new EvaluateTelemetryForAlertsCommand(DEVICE_ID, OCCURRED_AT, pm25, new BigDecimal("400"), new BigDecimal("22"), new BigDecimal("50"), java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO);
     }
 
     private static Alert openAlert() {

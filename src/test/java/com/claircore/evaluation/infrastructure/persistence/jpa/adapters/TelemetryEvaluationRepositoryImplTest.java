@@ -5,7 +5,9 @@ import com.claircore.evaluation.domain.model.valueobjects.AirQuality;
 import com.claircore.evaluation.domain.model.valueobjects.Connectivity;
 import com.claircore.evaluation.domain.model.valueobjects.DeviceId;
 import com.claircore.evaluation.domain.model.valueobjects.Location;
+import com.claircore.evaluation.domain.model.valueobjects.Hydrology;
 import com.claircore.evaluation.domain.model.valueobjects.ParticulateMatter;
+import com.claircore.evaluation.domain.model.valueobjects.PowerStatus;
 import com.claircore.evaluation.domain.repositories.TelemetryEvaluationRepository;
 import com.claircore.shared.infrastructure.config.JpaAuditingConfiguration;
 import org.junit.jupiter.api.Test;
@@ -170,7 +172,7 @@ class TelemetryEvaluationRepositoryImplTest {
                 3600L,
                 new AirQuality(co2, 22.0, 45.0),
                 new ParticulateMatter(5.0, pm25, 25.0),
-                new Connectivity("ONLINE", "WiFi", -50),
+                Hydrology.absent(), PowerStatus.absent(), new Connectivity("ONLINE", "WiFi", -50),
                 new Location("Chile"),
                 85,
                 "STABLE",

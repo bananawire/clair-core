@@ -11,8 +11,10 @@ import com.claircore.evaluation.domain.model.queries.GetLatestEvaluationByDevice
 import com.claircore.evaluation.domain.model.valueobjects.AirQuality;
 import com.claircore.evaluation.domain.model.valueobjects.Connectivity;
 import com.claircore.evaluation.domain.model.valueobjects.DeviceId;
+import com.claircore.evaluation.domain.model.valueobjects.Hydrology;
 import com.claircore.evaluation.domain.model.valueobjects.Location;
 import com.claircore.evaluation.domain.model.valueobjects.ParticulateMatter;
+import com.claircore.evaluation.domain.model.valueobjects.PowerStatus;
 import com.claircore.evaluation.interfaces.acl.EvaluationContextFacade;
 import com.claircore.evaluation.interfaces.acl.HourlyTelemetryAverage;
 import com.claircore.evaluation.interfaces.acl.TelemetryReading;
@@ -47,6 +49,18 @@ public class EvaluationContextFacadeImpl implements EvaluationContextFacade {
         var query = new GetLatestEvaluationByDeviceQuery(deviceId);
         return telemetryEvaluationQueryService.handle(query)
                 .map(TelemetryEvaluation::getRecordedAt);
+    }
+
+    @Override
+    public Optional<TelemetryReading> getLatestReading(UUID deviceId, Instant visibleSince) {
+        return telemetryEvaluationQueryService.handle(new GetLatestEvaluationByDeviceQuery(deviceId, visibleSince))
+                .map(e -> new TelemetryReading(
+                        e.getDeviceId().value(),
+                        e.getAirQuality().co2(),
+                        e.getParticulateMatter().pm2_5(),
+                        e.getAirQuality().temperature(),
+                        e.getAirQuality().humidity(),
+                        e.getRecordedAt()));
     }
 
     @Override
@@ -87,6 +101,8 @@ public class EvaluationContextFacadeImpl implements EvaluationContextFacade {
                     0L,
                     new AirQuality(submission.co2(), submission.temperature(), submission.humidity()),
                     new ParticulateMatter(submission.pm1_0(), submission.pm2_5(), submission.pm10()),
+                    new Hydrology(submission.rainfallMm(), submission.waterLevelCm()),
+                    new PowerStatus(submission.batteryPercent(), submission.solarCharging()),
                     new Connectivity(submission.connectivityStatus(), submission.networkName(), submission.signalStrength()),
                     new Location(submission.country()),
                     submission.healthStatus(),

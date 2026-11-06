@@ -127,7 +127,7 @@ class CommittedEventsIntegrationTest {
 
     @Test void telemetryConsumersRunOnlyForCommittedReadings() {
         var event = new com.claircore.evaluation.interfaces.events.TelemetryRecordedIntegrationEvent(
-                UUID.randomUUID(), 800, 24, 50, 5, 10, 15, "ONLINE", "wifi", -50,
+                UUID.randomUUID(), 800, 24, 50, 5, 10, 15, 0.0, 0.0, null, false, "ONLINE", "wifi", -50,
                 "PE", 1, "OK", 100, "12:00", Instant.now());
         new TransactionTemplate(transactions).executeWithoutResult(status -> {
             events.publishEvent(event);

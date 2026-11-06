@@ -85,6 +85,11 @@ ONESIGNAL_REST_API_KEY=your_onesignal_rest_api_key
 ONESIGNAL_APP_ID=your_onesignal_app_id
 ONESIGNAL_FRONTEND_URL=http://localhost:4200
 
+# DeepSeek (AI assistant; an empty key disables it)
+DEEPSEEK_API_KEY=
+DEEPSEEK_API_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-flash
+
 # Factory inventory (optional). CSV columns: serial_number,hardware_id,api_key,name
 DEVICE_PROVISIONING_IMPORT_PATH=
 # Where the demo profile writes its generated inventory (contains API keys; keep it out of git)
@@ -140,6 +145,26 @@ Device and Evaluation bounded-context interfaces.
 
 `SMTP_AUTH`, `SMTP_SSL` and `SMTP_STARTTLS` control the mail transport in every profile. The full
 laptop runbook, including the edge and the device, is `docs/RUNBOOK.md`.
+
+## Local registration without email verification
+
+For disposable test accounts, explicitly set all three values in the core's `.env`:
+
+```env
+SPRING_PROFILES_ACTIVE=local
+SERVER_ADDRESS=127.0.0.1
+LOCAL_REGISTRATION_AUTO_CONFIRM=true
+```
+
+Restart the core after changing `.env`. Registration through `/api/v1/auth/sign-up`
+then creates an active account without sending mail and returns `verificationRequired: false`.
+The UI redirects to login instead of the verification-code page. Password rules and hashing
+still apply (for example, `Local123!` satisfies the rules); existing accounts are not changed.
+The configured database is still used: these settings do not provision an isolated local database.
+
+Auto-confirm is disabled by default. Startup refuses to enable it without the `local` profile,
+with `prod`/`production` active, or without an explicit loopback bind. Remove the flag to restore
+ordinary email verification. Do not enable this mode in production.
 
 ## Compile the Project
 
@@ -338,17 +363,5 @@ java -jar target/clair-core-1.0.0.jar
 
 ## Verification
 
-`mvn clean verify` runs the unit tests, JPA tests, complete application-context test, and
-architecture rules. H2 tests use H2's dialect, with Flyway disabled.
-
-To include PostgreSQL migration and roster integration tests, point these variables at a
-**disposable test database** (the tests create and remove their own schemas):
-
-```sh
-export CLAIR_TEST_POSTGRES_URL=jdbc:postgresql://localhost:5432/clair_test
-export CLAIR_TEST_POSTGRES_USER=clair_test
-export CLAIR_TEST_POSTGRES_PASSWORD=clair_test
-mvn clean verify
-```
-
-CI supplies PostgreSQL 15 and runs these checks on every build.
+`mvn clean verify` runs the unit, integration, BDD and system suites on H2. Flyway stays off
+for those tests. CI runs the same command; it does not start PostgreSQL or Redis.

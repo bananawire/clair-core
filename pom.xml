@@ -41,6 +41,17 @@
             <version>7.20.1</version> 
             <scope>test</scope> 
         </dependency>
+        <dependency>
+            <groupId>io.cucumber</groupId>
+            <artifactId>cucumber-junit-platform-engine</artifactId>
+            <version>7.20.1</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-suite</artifactId>
+            <scope>test</scope>
+        </dependency>
 
 
         <!-- Spring Boot Web -->
@@ -216,6 +227,8 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
+                <!-- 3.5.3 (Boot default) drops JUnit Platform Suite results: Cucumber failures would not fail the build. -->
+                <version>3.5.4</version>
                 <configuration>
                     <argLine>-javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
                 </configuration>
